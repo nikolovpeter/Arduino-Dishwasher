@@ -1,6 +1,7 @@
+
 //Peter Nikolov's Dishwasher v.1.0.
 //Programer: Peter Nikolov.
-//Based on Rivera_1.0 by Pedro Rivera - Thank you.
+//Based on Rivera_1.0 by Pedro Rivera.
 //A dishwasher controller with different wash programs defined via a matrix of constants,
 //temperature control thermistor 10k.
 //6 relay control, opto-isolator adviceable.
@@ -15,19 +16,21 @@ rgb_lcd lcd;
 
 //Pin assignment
 //LiquidCrystal lcd(8, 9, 10, 11, 12, 13);
-#define doorBtn 7 //door button
-//#define errorSens 3 //overfill sensor error
-#define drainPump 4 //drain pump
-#define DetergentSolen 5 //detergent dispenser solenoid 
-#define inletValve 6 //water inlet valve
-#define RinseAidSolen 8 //rinse aid dispenser solenoid
-#define regenSolen 9 //regeneration solenoid 
-#define keySelect A0 //select key
-#define startBtn A1 //start button
-#define fillSens A2 //fill sensor
-#define tempSensor A3 //temperature sensor
-#define heater A4 //heater
-#define washPump A5 //washpump 
+#define inletValve 4 //water inlet valve
+#define heater 5 //heater 
+#define startBtn 6 //start/pause/resume/reset button
+#define doorBtn 7 //door button, needs to be able to handle interrupts
+#define washPump 8 //washpump
+#define drainPump 9 //drain pump
+#define regenSolen 10 //regeneration solenoid 
+//#define errorSens 11 //overfill sensor error
+#define DetergentSolen A0 //detergent dispenser solenoid 
+#define RinseAidSolen A1 //rinse aid dispenser solenoid
+#define keySelect A2 //select key
+#define fillSens A3 //fill sensor
+#define tempSensor A4 //temperature sensor
+
+
 
 //constants declaration
 const String ProgramVersion = "1.0";
@@ -41,45 +44,46 @@ const byte PreWashDurations[] =  {0, 12, 2, 8, 0, 0, 0, 0}; // Pre-wash duration
 const byte WashDurations[] =  {0, 25, 25, 11, 10, 20, 25, 0}; // Wash durations per programs in minutes; 0 = no Wash
 const byte Rinse1Durations[] =  {0, 6, 6, 6, 6, 6, 6, 10}; // Rinse 1 durations per programs in minutes; 0 = no Rinse 1
 const byte Rinse2Durations[] =  {0, 6, 6, 2, 2, 2, 6, 0}; // Rinse 2 durations per programs in minutes; 0 = no Rinse 2
-const byte ClearRinseDurations[] =  {0, 1, 1, 1, 1, 1, 10, 0}; // Clear Rinse durations per programs in minutes; 0 = no Clear Rinse
-const byte DryDurations[] =  {0, 11, 11, 11, 11, 11, 0, 11}; // Drying durations per programs in minutes; 0 = no Drying
+const byte ClearRinseDurations[] =  {0, 10, 10, 10, 10, 10, 10, 0}; // Clear Rinse durations per programs in minutes; 0 = no Clear Rinse
+const byte DryDurations[] =  {0, 11, 11, 11, 2, 2, 1, 1}; // Drying durations per programs in minutes; 0 = no Drying
 const int debounceDelay = 20; // delay to count as button pressed - 20 milliseconds
 const int R_debounceDelay = 5000; // delay to count as reset - 5 seconds
 const int OverheatLimit = 72; // Temperature limit to count for overheating
 
 //variables declaration
+volatile int doorBtnState = HIGH;
+volatile byte pause = false;
+volatile unsigned long timeStopped = 0;      // Record time program was paused
+volatile unsigned long pauseTime = 0;        //record how long the program was paused for
+volatile byte Prepauseheater;
+volatile byte PrepausewashPump;
+volatile byte PrepauseDetergentSolen;
+volatile byte PrepausedrainPump;
+volatile byte PrepauseinletValve;
+volatile byte PrepauseRinseAidSolen;
+volatile byte PrepauseregenSolen;
+volatile int faultCode = 0;
 unsigned long TotalPeriodStart, TotalPeriodElapsed;
 unsigned long periodStart, periodElapsed;
 unsigned long TotalFillTime = 0, CurrentFillStart = 0;
 int ExpDuration = 0; //Expected program duration in minutes
-volatile int doorBtnState = 0;
 double tempArray[25];
 byte arrayIndex = 0;
 int lcdKeyMenu = 0;
 int selKeyIN = 0;
-int startBtnState = 0;
 int fillSensState = 0;
 int tempLimit = 0;
 int x = 0;
 int RawADC = 240; //temporary temperature around 0 degrees Celsius - to be removed
-byte Prepauseheater = 0;
-byte PrepausewashPump = 0;
-byte PrepauseDetergentSolen = 0;
-byte PrepausedrainPump = 0;
-byte PrepauseinletValve = 0;
-byte PrepauseRinseAidSolen = 0;
-//byte PrepauseregenSolen = 0;
 String ProgramName = "                ";
 String SubCycleName = "                ";
-int faultCode = 0;
 //-----On/pause/restart/reset Button reference ------
-int O_buttonState;
-int O_lastButtonState = 0;
+int startBtnState = HIGH;
+int O_buttonState = HIGH;
+int O_lastButtonState = HIGH;
 unsigned long lastDebounceTime = 0;
 int onButtonCount = 0;                //switch case statement to control what each button push does
-byte pause = false;
-unsigned long timeStopped = 0;      // Record time program was paused
-unsigned long pauseTime = 0;        //record how long the program was paused for
+
 
 
 //General actions
@@ -176,6 +180,117 @@ void Finish() {
   Serial.println(F("Finish ended.")); //temp
 }
 
+
+void actDoorBtn() { // swich door action
+  Serial.println(F("actDoorBtn started.")); //temp
+  pauseFun();
+  Serial.println(F("Machine paused due to open door.")); //temp
+  doorBtnState = digitalRead(doorBtn);
+  while (doorBtnState == LOW && pause == true) {
+    doorBtnState = digitalRead(doorBtn);
+  }
+  Serial.println(F("Machine resumed after door closed.")); //temp
+  resumeFun();   //resume program
+  Serial.println(F("actDoorBtn ended.")); //temp
+}
+
+void stopFun() {  // stop all parts of the machine
+  Serial.println(F("stopFun started.")); //temp
+  digitalWrite(inletValve, LOW);
+  digitalWrite(heater, LOW);
+  digitalWrite(washPump, LOW);
+  digitalWrite(drainPump, LOW);
+  digitalWrite(DetergentSolen, LOW);
+  digitalWrite(RinseAidSolen, LOW);
+  digitalWrite(regenSolen, LOW);
+  Serial.println(F("stopFun ended.")); //temp
+}
+
+void pauseFun() { //stop all wash processes and raise pause flag
+  //Serial.println("pauseFun started."); //temp
+  if (pause == false) {
+    pause = true;
+    Serial.println(F("Pause started.")); //temp
+    timeStopped = millis();
+    Prepauseheater = digitalRead(heater);
+    PrepausewashPump = digitalRead(washPump);
+    PrepauseDetergentSolen = digitalRead(DetergentSolen);
+    PrepausedrainPump = digitalRead(drainPump);
+    PrepauseinletValve = digitalRead(inletValve);
+    PrepauseRinseAidSolen = digitalRead(RinseAidSolen);
+    PrepauseregenSolen = digitalRead(regenSolen);
+    stopFun();
+    lcd.setCursor(0, 1);
+    lcd.print(F("Paused          "));
+  }
+  // Serial.println("pauseFun ended."); //temp
+}
+
+void resumeFun() { //stop all wash processes
+  Serial.println(F("resumeFun started.")); //temp
+  lcd.setCursor(0, 1);
+  lcd.print(F("Resuming...     "));
+  Serial.println(F("Resumed from pause.")); //temp
+  pause = false;
+  pauseTime = millis() - timeStopped;
+  digitalWrite(heater, Prepauseheater);
+  digitalWrite(washPump, PrepausewashPump);
+  digitalWrite(DetergentSolen, PrepauseDetergentSolen);
+  digitalWrite(drainPump, PrepausedrainPump);
+  digitalWrite(inletValve, PrepauseinletValve);
+  digitalWrite(RinseAidSolen, PrepauseRinseAidSolen);
+  digitalWrite(regenSolen, PrepauseregenSolen);
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(ProgramName);
+  lcd.setCursor(0, 1);
+  lcd.print(SubCycleName);
+  Serial.println(F("resumeFun ended.")); //temp
+}
+
+
+void resetFun() { // Reset wash, drain washer and restart
+  lcd.home (); // go home
+  lcd.setCursor(0, 0);
+  lcd.print(F("Machine reset...     "));
+  lcd.setCursor(0, 1);
+  lcd.print(F("                     "));
+  stopFun();  // Stop all devices
+  actDrain(); // Drain
+  // Initialize all variables
+  onButtonCount = 0;
+  TotalFillTime = 0;
+  CurrentFillStart = 0;
+  ExpDuration = 0;
+  arrayIndex = 0;
+  lcdKeyMenu = 0;
+  selKeyIN = 0;
+  fillSensState = 0;
+  x = 0;
+  Prepauseheater = 0;
+  PrepausewashPump = 0;
+  PrepauseDetergentSolen = 0;
+  PrepausedrainPump = 0;
+  PrepauseinletValve = 0;
+  PrepauseRinseAidSolen = 0;
+  PrepauseregenSolen = 0;
+  ProgramName = F("                ");
+  SubCycleName = F("                ");
+  faultCode = 0;
+  startBtnState = HIGH;
+  O_buttonState = HIGH;
+  O_lastButtonState = HIGH;
+  lastDebounceTime = 0;
+  onButtonCount = 0;
+  pause = false;
+  timeStopped = 0;
+  pauseTime = 0;
+  // Restart machine
+  setup();    // Restart code
+  loop();
+}
+
+
 void actErrorSens() {
   Serial.println(F("actErrorSens started.")); //temp
   cli();
@@ -187,6 +302,8 @@ void actErrorSens() {
   while (true) {};
   Serial.println(F("actErrorSens ended.")); //temp
 }
+
+
 
 void errorFun() { //stop all wash processes and show fault code
   Serial.println(F("errorFun started.")); //temp
@@ -247,117 +364,8 @@ void errorFun() { //stop all wash processes and show fault code
 }
 
 
-void actDoorBtn() { // swich door action
-  Serial.println(F("actDoorBtn started.")); //temp
-  pauseFun();
-  doorBtnState = digitalRead(doorBtn);
-  while (doorBtnState == HIGH && pause == true) {
-    doorBtnState = digitalRead(doorBtn);
-  }
-  resumeFun();   //resume program
-  Serial.println(F("actDoorBtn ended.")); //temp
-}
 
-
-void pauseFun() { //stop all wash processes and raise pause flag
-  //Serial.println("pauseFun started."); //temp
-  if (pause == false) {
-    pause = true;
-    Serial.println(F("Pause started.")); //temp
-    timeStopped = millis();
-    Prepauseheater = digitalRead(heater);
-    PrepausewashPump = digitalRead(washPump);
-    PrepauseDetergentSolen = digitalRead(DetergentSolen);
-    PrepausedrainPump = digitalRead(drainPump);
-    PrepauseinletValve = digitalRead(inletValve);
-    PrepauseRinseAidSolen = digitalRead(RinseAidSolen);
-    // PrepauseregenSolen = digitalRead(regenSolen);
-    stopFun();
-    lcd.setCursor(0, 1);
-    lcd.print(F("Paused          "));
-  }
-  // Serial.println("pauseFun ended."); //temp
-}
-
-void resumeFun() { //stop all wash processes
-  Serial.println(F("resumeFun started.")); //temp
-  lcd.setCursor(0, 1);
-  lcd.print(F("Resuming...     "));
-  Serial.println(F("Resumed from pause.")); //temp
-  pause = false;
-  pauseTime = millis() - timeStopped;
-  digitalWrite(heater, Prepauseheater);
-  digitalWrite(washPump, PrepausewashPump);
-  digitalWrite(DetergentSolen, PrepauseDetergentSolen);
-  digitalWrite(drainPump, PrepausedrainPump);
-  digitalWrite(inletValve, PrepauseinletValve);
-  digitalWrite(RinseAidSolen, PrepauseRinseAidSolen);
-  //digitalWrite(regenSolen, PrepauseregenSolen);
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print(ProgramName);
-  lcd.setCursor(0, 1);
-  lcd.print(SubCycleName);
-  Serial.println(F("resumeFun ended.")); //temp
-}
-
-
-void resetFun() { // Reset wash, drain washer and restart
-  lcd.home (); // go home
-  lcd.setCursor(0, 0);
-  lcd.print(F("Machine reset...     "));
-  lcd.setCursor(0, 1);
-  lcd.print(F("                     "));
-  stopFun();  // Stop all devices
-  actDrain(); // Drain
-  // Initialize all variables
-  onButtonCount = 0;
-  TotalFillTime = 0;
-  CurrentFillStart = 0;
-  ExpDuration = 0;
-  arrayIndex = 0;
-  lcdKeyMenu = 0;
-  selKeyIN = 0;
-  startBtnState = 0;
-  fillSensState = 0;
-  x = 0;
-  Prepauseheater = 0;
-  PrepausewashPump = 0;
-  PrepauseDetergentSolen = 0;
-  PrepausedrainPump = 0;
-  PrepauseinletValve = 0;
-  PrepauseRinseAidSolen = 0;
-  // PrepauseregenSolen = 0;
-  ProgramName = F("                ");
-  SubCycleName = F("                ");
-  faultCode = 0;
-  O_buttonState;
-  O_lastButtonState = 0;
-  lastDebounceTime = 0;
-  onButtonCount = 0;
-  pause = false;
-  timeStopped = 0;
-  pauseTime = 0;
-  // Restart machine
-  setup();    // Restart code
-  loop();
-}
-
-
-void stopFun() {  // stop all parts of the machine
-  Serial.println(F("stopFun started.")); //temp
-  digitalWrite(heater, LOW);
-  digitalWrite(washPump, LOW);
-  digitalWrite(DetergentSolen, LOW);
-  digitalWrite(RinseAidSolen, LOW);
-  digitalWrite(drainPump, LOW);
-  digitalWrite(inletValve, LOW);
-  // digitalWrite(regenSolen, LOW);
-  Serial.println(F("stopFun ended.")); //temp
-}
-
-
-int readKey() { //read startup programs select key
+int readKey() { //read programs selector key
   selKeyIN = analogRead(keySelect); //read the value from the sensor
   for (int i = 0; i < NumberOfPrograms; i++) {
     if (selKeyIN < KeySelectAnalogValues[i]) return i;
@@ -372,12 +380,6 @@ void selMenu() {
   lcd.print(F("Select a program"));
   lcd.setCursor(0, 1);
   lcd.print(F("and press Start"));
-  actStartBtn();
-  Serial.println(F("selMenu ended.")); //temp
-}
-
-void actStartBtn() { //start button action
-  Serial.println(F("actStartBtn started.")); //temp
   while (onOffFun() != 1) {
     lcdKeyMenu = readKey(); // read key
     lcd.setCursor(0, 1);
@@ -389,17 +391,19 @@ void actStartBtn() { //start button action
   timeStopped = 0;
   pauseTime = 0;
   pause = false;
-  Serial.println(F("actStartBtn ended.")); //temp
+  Serial.println(F("selMenu ended.")); //temp
 }
 
 
-int onOffFun () { // On/Pause/Restart/Reset Button
+
+int onOffFun () { // On/Pause/Resume/Reset Button
+  if (digitalRead(doorBtn) == LOW) actDoorBtn();
   do { // Start loop to check for "Paused" state
     startBtnState = digitalRead(startBtn);
     if (startBtnState != O_lastButtonState) { //meaning button changed state
       lastDebounceTime = millis();
     }
-    if ((startBtnState == 1) && ((millis() - lastDebounceTime) >= R_debounceDelay)) { // button held down long enough to count as Reset
+    if ((startBtnState == LOW) && ((millis() - lastDebounceTime) >= R_debounceDelay)) { // button held down long enough to count as Reset
       O_lastButtonState = startBtnState;
       onButtonCount = 4;
       resetFun(); // Reset the machine.
@@ -489,6 +493,7 @@ void actFill() {
     lcd.setCursor(0, 1);
     lcd.print(F("Filling...  "));
     dispTemp ();
+    onOffFun ();
     actHeaterOFF();                    // Heater OFF
     periodStart = millis();
     timeElapsed();
@@ -500,6 +505,7 @@ void actFill() {
     //fillSensState = digitalRead(fillSens); //temporarily removed - to be reused
     while (fillSensState == LOW) {
       timeElapsed();
+      onOffFun ();
       if (TotalFillTime + ((millis() - CurrentFillStart)) >= 240000) {   // Check if total fill time exceeds 4 minutes
         actHeaterOFF(); // Heater OFF
         digitalWrite(washPump, LOW);   // Wash pump OFF
@@ -773,7 +779,7 @@ void actDry(byte DryDur) {
   actDrain();                      // Drain
   lcd.setCursor(0, 1);
   lcd.print(SubCycleName);
-  waitXmsec (DryDur * 60000);      // Wait abitrary time according to parameter
+  waitXmsec (DryDur * 60000);      // Wait arbitrary time according to parameter
   actDrain();                      // Drain
   Serial.println(F("actDry ended.")); //temp
 }
@@ -900,25 +906,22 @@ void setup() {
   pinMode(RinseAidSolen, OUTPUT);
   pinMode(drainPump, OUTPUT);
   pinMode(inletValve, OUTPUT);
-  pinMode(startBtn, INPUT);
-  pinMode(fillSens, INPUT);
-  pinMode(doorBtn, INPUT);
+  pinMode(startBtn, INPUT_PULLUP);
+  pinMode(doorBtn, INPUT_PULLUP);
   // pinMode(errorSens, INPUT);
   pinMode(keySelect, INPUT);
+  pinMode(fillSens, INPUT);
   pinMode(tempSensor, INPUT);
-  lcd.clear();
-  lcd.home (); // go home
-  lcd.print ("Hello 4!"); // temp
-  digitalWrite(startBtn, HIGH);
-  digitalWrite(fillSens, LOW);
+  digitalWrite(inletValve, LOW);
+  digitalWrite(heater, LOW);
   digitalWrite(washPump, LOW);
   digitalWrite(drainPump, LOW);
   digitalWrite(DetergentSolen, LOW);
   digitalWrite(RinseAidSolen, LOW);
-  digitalWrite(inletValve, LOW);
-  digitalWrite(heater, LOW);
-  attachInterrupt(digitalPinToInterrupt(7), actDoorBtn, RISING);
-  // attachInterrupt(digitalPinToInterrupt(3), actErrorSens, RISING);
+  digitalWrite(regenSolen, LOW);
+  digitalWrite(fillSens, LOW);
+  // attachInterrupt(digitalPinToInterrupt(doorBtn), actDoorBtn, FALLING);
+  // attachInterrupt(digitalPinToInterrupt(3), actErrorSens, FALLING);
   Serial.println("setup ended."); //temp
 }
 
