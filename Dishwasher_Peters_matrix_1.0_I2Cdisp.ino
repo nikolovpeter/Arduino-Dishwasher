@@ -18,34 +18,34 @@ rgb_lcd lcd;
 //LiquidCrystal lcd(8, 9, 10, 11, 12, 13);
 #define inletValve 4 //water inlet valve
 #define heater 5 //heater 
-#define startBtn 6 //start/pause/resume/reset button
-#define doorBtn 7 //door button, needs to be able to handle interrupts
-#define washPump 8 //washpump
-#define drainPump 9 //drain pump
+#define washPump 6 //washpump
+#define drainPump 7 //drain pump
+#define DetergentSolen 8 //detergent dispenser solenoid 
+#define RinseAidSolen 9 //rinse aid dispenser solenoid
 #define regenSolen 10 //regeneration solenoid 
+#define startBtn 11 //start/pause/resume/reset button
+#define doorBtn 12 //door button
 //#define errorSens 11 //overfill sensor error
-#define DetergentSolen A0 //detergent dispenser solenoid 
-#define RinseAidSolen A1 //rinse aid dispenser solenoid
-#define keySelect A2 //select key
-#define fillSens A3 //fill sensor
-#define tempSensor A4 //temperature sensor
+#define keySelect A0 //select key
+#define fillSens A1 //fill sensor
+#define tempSensor A3 //temperature sensor
 
 
 
 //constants declaration
 const String ProgramVersion = "1.0";
-const int NumberOfPrograms = 8;
-const String ProgramNames[] = {"Select", "Intensive Wash", "Normal Wash", "Eco Wash", "Fast Wash", "Express Strong", "Cold Wash", "Rinse Only"}; // Names of programs
-const byte HighestTemperatures[] = {0, 65, 60, 48, 36, 60, 5, 20}; // Highest allowed temperatures for programs in degrees Celsius
-const byte ExpectedDurations[] =  {0, 120, 100, 80, 40, 50, 55, 20}; // Expected durations of programs in minutes
-const int KeySelectAnalogValues[] =  {0, 150, 300, 450, 600, 750, 900, 1050}; // Analog boundaries of the programs for the selector analog input
-const byte MatrixStructure[] =  {0, 1, 1, 0, 1, 1, 1, 1}; // 1 = matrix structure; 0 = custom program
-const byte PreWashDurations[] =  {0, 12, 2, 8, 0, 0, 0, 0}; // Pre-wash durations per programs in minutes; 0 = no Pre-wash
-const byte WashDurations[] =  {0, 25, 25, 11, 10, 20, 25, 0}; // Wash durations per programs in minutes; 0 = no Wash
-const byte Rinse1Durations[] =  {0, 6, 6, 6, 6, 6, 6, 10}; // Rinse 1 durations per programs in minutes; 0 = no Rinse 1
-const byte Rinse2Durations[] =  {0, 6, 6, 2, 2, 2, 6, 0}; // Rinse 2 durations per programs in minutes; 0 = no Rinse 2
-const byte ClearRinseDurations[] =  {0, 10, 10, 10, 10, 10, 10, 0}; // Clear Rinse durations per programs in minutes; 0 = no Clear Rinse
-const byte DryDurations[] =  {0, 11, 11, 11, 2, 2, 1, 1}; // Drying durations per programs in minutes; 0 = no Drying
+const int NumberOfPrograms = 9;
+const String ProgramNames[] = {"Select", "Intensive Wash", "Normal Wash", "Eco Wash", "Fast Wash", "Express Strong", "Cold Wash", "Rinse Only", "Custom"}; // Names of programs
+const byte HighestTemperatures[] = {0, 65, 60, 48, 36, 60, 5, 20, 65}; // Highest allowed temperatures for programs in degrees Celsius
+const byte ExpectedDurations[] =  {0, 120, 100, 80, 40, 50, 55, 20, 120}; // Expected durations of programs in minutes
+const int KeySelectAnalogValues[] =  {0, 150, 300, 450, 600, 750, 850, 950, 1050}; // Analog boundaries of the programs for the selector analog input
+const byte MatrixStructure[] =  {0, 1, 1, 0, 1, 1, 1, 1, 0}; // 1 = matrix structure; 0 = custom program
+const byte PreWashDurations[] =  {0, 12, 2, 8, 0, 0, 0, 0, 10}; // Pre-wash durations per programs in minutes; 0 = no Pre-wash
+const byte WashDurations[] =  {0, 25, 25, 11, 10, 20, 25, 0, 45}; // Wash durations per programs in minutes; 0 = no Wash
+const byte Rinse1Durations[] =  {0, 6, 6, 6, 6, 6, 6, 10, 20}; // Rinse 1 durations per programs in minutes; 0 = no Rinse 1
+const byte Rinse2Durations[] =  {0, 6, 6, 2, 2, 2, 6, 0, 5}; // Rinse 2 durations per programs in minutes; 0 = no Rinse 2
+const byte ClearRinseDurations[] =  {0, 10, 10, 10, 10, 10, 10, 0, 20}; // Clear Rinse durations per programs in minutes; 0 = no Clear Rinse
+const byte DryDurations[] =  {0, 11, 11, 11, 2, 2, 1, 1, 10}; // Drying durations per programs in minutes; 0 = no Drying
 const int debounceDelay = 20; // delay to count as button pressed - 20 milliseconds
 const int R_debounceDelay = 5000; // delay to count as reset - 5 seconds
 const int OverheatLimit = 72; // Temperature limit to count for overheating
@@ -71,6 +71,9 @@ double tempArray[25];
 byte arrayIndex = 0;
 int lcdKeyMenu = 0;
 int selKeyIN = 0;
+unsigned long CustomTemp = 0;
+unsigned long CustomDuration = 0;
+double CustomCoefficient;
 int fillSensState = 0;
 int tempLimit = 0;
 int x = 0;
@@ -155,19 +158,6 @@ void dispTemp() {
 
 // Program flow actions
 
-
-void Welcome() {
-  Serial.println(F("Welcome started.")); //temp
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print(F("Welcome! Arduino "));
-  lcd.setCursor(0, 1);
-  lcd.print(F("Dishwasher "));
-  lcd.print(ProgramVersion);
-  delay(4000);
-  lcd.clear();
-  Serial.println(F("Welcome ended.")); //temp
-}
 
 void Finish() {
   Serial.println(F("Finish started.")); //temp
@@ -451,8 +441,6 @@ void actDrain() {
   digitalWrite(washPump, LOW);         // Wash pump OFF
   waitThreeSec();
   //fillSensState = digitalRead(fillSens); //temporarily removed - to be reused
-  // waitXmsec (5000);  //temp - to be removed
-  // fillSensState = LOW; //temp - to be removed
   if (fillSensState == HIGH) {         // Fill sensor HIGH - start draining
     periodStart = millis();
     timeElapsed();
@@ -729,32 +717,6 @@ void actWashCycle(unsigned int WashCycleTemperature, unsigned int WashCycleDurat
 //Washing sub-cycles
 
 
-void actRinse() {
-  Serial.println(F("actRinse started.")); //temp
-  timeElapsed();
-  actCheckFillLevel();
-  dispTemp();
-  waitThreeSec();
-  actWashCycle(15, 6, 0, 0, "Rinsing...     ");  // Request wash cycle without detergent
-  timeElapsed();
-  onOffFun();
-  waitThreeSec();
-  Serial.println(F("actRinse ended.")); //temp
-}
-
-void actClearRinse() {
-  Serial.println(F("actClearRinse started.")); //temp
-  tempLimit = 48; // Max temperature 48 degrees
-  timeElapsed();
-  actCheckFillLevel();
-  dispTemp();
-  waitThreeSec();
-  actWashCycle (48, 1, 0, 1, "Clear rinse...    ");  // Wash at 48 degrees Celsius for 1 minute and finish with Rinse Aid
-  waitThreeSec();
-  timeElapsed();
-  Serial.println(F("actClearRinse ended.")); //temp
-}
-
 void actDry(byte DryDur) {
   Serial.println(F("actDry started.")); //temp
   TotalTimeElapsed();
@@ -802,6 +764,14 @@ void wMatrixProgram(byte ProgramIndex) {  // Matrix program
   if ( MatrixStructure[ProgramIndex] == 0) { // Program is not matrix - exiting procedure
     return;
   }
+  wMatrixCycle (ProgramName, PreWashDuration, WashDuration, Rinse1Duration, Rinse2Duration, ClearRinseDuration, DryDuration, ExpDuration, tempLimit);
+  Finish();
+  Serial.println(F("wMatrixProgram ended.")); //temp
+}
+
+
+void wMatrixCycle(String ProgramName, byte PreWashDuration, byte WashDuration,  byte Rinse1Duration, byte Rinse2Duration, byte ClearRinseDuration, byte DryDuration, byte ExpDuration, byte tempLimit ) { // Matrix cycle
+  Serial.println(F("wMatrixCycle started.")); //temp
   Serial.print(F("Program: ")); //temp
   Serial.print(ProgramName); //temp
   Serial.print(F(", temperature: ")); //temp
@@ -856,9 +826,9 @@ void wMatrixProgram(byte ProgramIndex) {  // Matrix program
   if (DryDuration > 0) {
     actDry(DryDuration);  // Dry
   }
-  Finish();
-  Serial.println(F("wMatrixProgram ended.")); //temp
+  Serial.println(F("wMatrixCycle ended.")); //temp
 }
+
 
 
 void wEconom() {  // Index = btnEconom
@@ -883,13 +853,82 @@ void wEconom() {  // Index = btnEconom
   waitThreeSec();
   actDrain();  // Drain
   waitThreeSec();
-  actRinse();  // Rinse
+  timeElapsed();
+  actWashCycle(15, 6, 0, 0, "Rinsing...     ");  // Request wash cycle without detergent
+  timeElapsed();
+  onOffFun();
   waitThreeSec();
-  actClearRinse();  // Clear Rinse
+  dispTemp();
+  actWashCycle (48, 1, 0, 1, "Clear rinse...    ");  // Wash at 48 degrees Celsius for 1 minute and finish with Rinse Aid
   waitThreeSec();
+  timeElapsed();
   actDry(11); //  Dry
   Finish();
   Serial.println(F("wEconom ended.")); //temp
+}
+
+
+void wCustom() {  // Custom program
+  Serial.println(F("wCustom started.")); //temp
+  ExpDuration = ExpectedDurations[8]; //Expected duration for Custom Wash
+  tempLimit = HighestTemperatures[8]; // Max temperature for Custom Wash
+  ProgramName = ProgramNames[8];
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(ProgramName); // name of program
+  lcd.setCursor(0, 1);
+  lcd.print(F("Temperature:      "));
+  onButtonCount = 0; // initialize selector to select maximum temperature
+  while (onOffFun() != 1) {
+    selKeyIN = analogRead(keySelect);
+    CustomCoefficient = selKeyIN / 1024.0;
+    CustomTemp = (tempLimit * CustomCoefficient / 5.0)  ; // read custom temperature
+    CustomTemp = CustomTemp * 5;
+    if (CustomTemp < 5) CustomTemp = 5;
+    lcd.setCursor(12, 1);
+    lcd.print(CustomTemp);
+    lcd.print((char)223);
+    lcd.print("C   ");
+  }
+  lcd.setCursor(0, 1);
+  lcd.print(F("Duration:          "));
+  onButtonCount = 0; // initialize selector to select maximum duration
+  while (onOffFun() != 1) {
+    selKeyIN = analogRead(keySelect);
+    CustomCoefficient = selKeyIN / 1024.0;
+    CustomDuration = (ExpDuration * CustomCoefficient / 5.0)   ; // read custom duration
+    CustomDuration = CustomDuration * 5;
+    if (CustomDuration < 10) CustomDuration = 10;
+    lcd.setCursor(12, 1);
+    lcd.print(CustomDuration);
+    lcd.print("'   ");
+  }
+  ExpDuration = CustomDuration;
+  TotalPeriodStart = millis();
+  timeStopped = 0;
+  pauseTime = 0;
+  pause = false;
+  Serial.print(F("Selected custom temperature: "));
+  Serial.print(CustomTemp);
+  Serial.print(" degrees C, custom duration: ");
+  Serial.print(CustomDuration);
+  Serial.println(" minutes.");
+  String ProgramName = "Custom            ";
+  byte PreWashDuration = (PreWashDurations[8] * CustomCoefficient / 5.0);
+  PreWashDuration = PreWashDuration * 5;
+  byte WashDuration = (WashDurations[8] * CustomCoefficient / 5.0); // Wash duration
+  WashDuration = WashDuration * 5;
+  byte Rinse1Duration = (Rinse1Durations[8] * CustomCoefficient / 5.0); // Rinse 1 duration
+  Rinse1Duration = Rinse1Duration * 5;
+  byte Rinse2Duration = (Rinse2Durations[8] * CustomCoefficient / 5.0); // Rinse 2 duration
+  Rinse2Duration = Rinse2Duration * 5;
+  byte ClearRinseDuration = (ClearRinseDurations[8] * CustomCoefficient / 5.0); // Clear Rinse duration
+  ClearRinseDuration = ClearRinseDuration * 5;
+  byte DryDuration = (DryDurations[8] * CustomCoefficient / 5.0); // Drying duration
+  DryDuration = DryDuration * 5;
+  wMatrixCycle (ProgramName, PreWashDuration, WashDuration, Rinse1Duration, Rinse2Duration, ClearRinseDuration, DryDuration, CustomDuration, CustomTemp);
+  Finish();
+  Serial.println(F("wCustom ended.")); //temp
 }
 
 void setup() {
@@ -928,7 +967,15 @@ void setup() {
 
 void loop() {
   Serial.println(F("loop started.")); //temp
-  Welcome();
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(F("Welcome! Arduino "));
+  lcd.setCursor(0, 1);
+  lcd.print(F("Dishwasher "));
+  lcd.print(ProgramVersion);
+  delay(4000);
+  lcd.clear();
+  Serial.println(F("Starting program selector.")); //temp
   selMenu();
   lcdKeyMenu = readKey(); // read key
   onOffFun();
@@ -953,6 +1000,9 @@ void loop() {
       break;
     case 7:
       wMatrixProgram(lcdKeyMenu);
+      break;
+    case 8:
+      wCustom();
       break;
   }
   Serial.println(F("loop ended.")); //temp
