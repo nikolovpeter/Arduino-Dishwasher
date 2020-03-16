@@ -22,7 +22,8 @@ rgb_lcd lcd;
 #define drainPump 7 //drain pump
 #define DetergentSolen 8 //detergent dispenser solenoid 
 #define RinseAidSolen 9 //rinse aid dispenser solenoid
-#define regenSolen 10 //regeneration solenoid 
+#define buzzer 10 //buzzer/beeper 
+#define regenSolen A5 //regeneration solenoid 
 #define startBtn 11 //start/pause/resume/reset button
 #define doorBtn 12 //door button
 //#define errorSens 11 //overfill sensor error
@@ -40,12 +41,12 @@ const byte HighestTemperatures[] = {0, 65, 60, 48, 36, 60, 5, 20, 65}; // Highes
 const byte ExpectedDurations[] =  {0, 120, 100, 80, 40, 50, 55, 20, 120}; // Expected durations of programs in minutes
 const int KeySelectAnalogValues[] =  {0, 150, 300, 450, 600, 750, 850, 950, 1050}; // Analog boundaries of the programs for the selector analog input
 const byte MatrixStructure[] =  {0, 1, 1, 0, 1, 1, 1, 1, 0}; // 1 = matrix structure; 0 = custom program
-const byte PreWashDurations[] =  {0, 12, 2, 8, 0, 0, 0, 0, 10}; // Pre-wash durations per programs in minutes; 0 = no Pre-wash
-const byte WashDurations[] =  {0, 25, 25, 11, 10, 20, 25, 0, 45}; // Wash durations per programs in minutes; 0 = no Wash
-const byte Rinse1Durations[] =  {0, 6, 6, 6, 6, 6, 6, 10, 20}; // Rinse 1 durations per programs in minutes; 0 = no Rinse 1
-const byte Rinse2Durations[] =  {0, 6, 6, 2, 2, 2, 6, 0, 5}; // Rinse 2 durations per programs in minutes; 0 = no Rinse 2
+const byte PreWashDurations[] =  {0, 12, 2, 8, 0, 0, 0, 0, 15}; // Pre-wash durations per programs in minutes; 0 = no Pre-wash
+const byte WashDurations[] =  {0, 25, 25, 11, 10, 20, 25, 0, 40}; // Wash durations per programs in minutes; 0 = no Wash
+const byte Rinse1Durations[] =  {0, 6, 6, 6, 6, 6, 6, 10, 14}; // Rinse 1 durations per programs in minutes; 0 = no Rinse 1
+const byte Rinse2Durations[] =  {0, 6, 6, 2, 2, 2, 6, 0, 11}; // Rinse 2 durations per programs in minutes; 0 = no Rinse 2
 const byte ClearRinseDurations[] =  {0, 10, 10, 10, 10, 10, 10, 0, 20}; // Clear Rinse durations per programs in minutes; 0 = no Clear Rinse
-const byte DryDurations[] =  {0, 11, 11, 11, 2, 2, 1, 1, 10}; // Drying durations per programs in minutes; 0 = no Drying
+const byte DryDurations[] =  {0, 11, 11, 11, 2, 2, 1, 1, 12}; // Drying durations per programs in minutes; 0 = no Drying
 const int debounceDelay = 20; // delay to count as button pressed - 20 milliseconds
 const int R_debounceDelay = 5000; // delay to count as reset - 5 seconds
 const int OverheatLimit = 72; // Temperature limit to count for overheating
@@ -166,7 +167,14 @@ void Finish() {
   lcd.print(F("Dishes are clean."));
   lcd.setCursor(0, 1);
   lcd.print(F("Press 'Off' btn."));
-  while (true) {};
+  tone (buzzer, 700, 150); // Buzz for 150 milliseconds with frequency 700 Hz
+  delay (400);
+  tone (buzzer, 700, 150); // Buzz for 150 milliseconds with frequency 700 Hz
+  delay (400);
+  tone (buzzer, 700, 250); // Buzz for 250 milliseconds with frequency 700 Hz
+  while (true) {
+    onOffFun();
+    };
   Serial.println(F("Finish ended.")); //temp
 }
 
@@ -193,12 +201,14 @@ void stopFun() {  // stop all parts of the machine
   digitalWrite(DetergentSolen, LOW);
   digitalWrite(RinseAidSolen, LOW);
   digitalWrite(regenSolen, LOW);
+  digitalWrite(buzzer, LOW);
   Serial.println(F("stopFun ended.")); //temp
 }
 
 void pauseFun() { //stop all wash processes and raise pause flag
   //Serial.println("pauseFun started."); //temp
   if (pause == false) {
+    tone (buzzer, 600, 500); // Buzz for 500 milliseconds with frequency 700 Hz
     pause = true;
     Serial.println(F("Pause started.")); //temp
     timeStopped = millis();
@@ -221,6 +231,9 @@ void resumeFun() { //stop all wash processes
   lcd.setCursor(0, 1);
   lcd.print(F("Resuming...     "));
   Serial.println(F("Resumed from pause.")); //temp
+  tone (buzzer, 800, 150); // Buzz for 150 milliseconds with frequency 700 Hz
+  delay (400);
+  tone (buzzer, 800, 300); // Buzz for 300 milliseconds with frequency 700 Hz
   pause = false;
   pauseTime = millis() - timeStopped;
   digitalWrite(heater, Prepauseheater);
@@ -245,6 +258,7 @@ void resetFun() { // Reset wash, drain washer and restart
   lcd.print(F("Machine reset...     "));
   lcd.setCursor(0, 1);
   lcd.print(F("                     "));
+  tone (buzzer, 700, 1000); // Buzz for 1000 milliseconds with frequency 700 Hz
   stopFun();  // Stop all devices
   actDrain(); // Drain
   // Initialize all variables
@@ -297,6 +311,7 @@ void actErrorSens() {
 
 void errorFun() { //stop all wash processes and show fault code
   Serial.println(F("errorFun started.")); //temp
+  tone (buzzer, 600, 3000); // Buzz for 3 seconds with frequency 600 Hz
   stopFun(); // Stop all wash processes
   lcd.clear();
   lcd.setCursor(0, 0);
@@ -357,6 +372,7 @@ void errorFun() { //stop all wash processes and show fault code
 
 int readKey() { //read programs selector key
   selKeyIN = analogRead(keySelect); //read the value from the sensor
+  // tone (buzzer, selKeyIN, 1000); // Buzz for 1 second and frequency according to selector
   for (int i = 0; i < NumberOfPrograms; i++) {
     if (selKeyIN < KeySelectAnalogValues[i]) return i;
   }
@@ -405,6 +421,7 @@ int onOffFun () { // On/Pause/Resume/Reset Button
         O_buttonState = startBtnState;
         if (O_buttonState == LOW) { //If button has been pushed increment onButtonCount by 1
           onButtonCount++;
+          tone (buzzer, 700, 200); // Buzz for 200 milliseconds with frequency 700 Hz
         }
       }
     }
@@ -914,18 +931,18 @@ void wCustom() {  // Custom program
   Serial.print(CustomDuration);
   Serial.println(" minutes.");
   String ProgramName = "Custom            ";
-  byte PreWashDuration = (PreWashDurations[8] * CustomCoefficient / 5.0);
+  byte PreWashDuration = (PreWashDurations[8] * CustomCoefficient / 5.0); // Pre-Wash duration, divider 5.0 makes it less important
   PreWashDuration = PreWashDuration * 5;
-  byte WashDuration = (WashDurations[8] * CustomCoefficient / 5.0); // Wash duration
-  WashDuration = WashDuration * 5;
-  byte Rinse1Duration = (Rinse1Durations[8] * CustomCoefficient / 5.0); // Rinse 1 duration
-  Rinse1Duration = Rinse1Duration * 5;
-  byte Rinse2Duration = (Rinse2Durations[8] * CustomCoefficient / 5.0); // Rinse 2 duration
-  Rinse2Duration = Rinse2Duration * 5;
-  byte ClearRinseDuration = (ClearRinseDurations[8] * CustomCoefficient / 5.0); // Clear Rinse duration
-  ClearRinseDuration = ClearRinseDuration * 5;
-  byte DryDuration = (DryDurations[8] * CustomCoefficient / 5.0); // Drying duration
-  DryDuration = DryDuration * 5;
+  byte WashDuration = (WashDurations[8] * CustomCoefficient / 1.0); // Wash duration, divider 1.0 makes it very important
+  WashDuration = WashDuration * 1;
+  byte Rinse1Duration = (Rinse1Durations[8] * CustomCoefficient / 1.0); // Rinse 1 duration, divider 1.0 makes it very important
+  Rinse1Duration = Rinse1Duration * 1;
+  byte Rinse2Duration = (Rinse2Durations[8] * CustomCoefficient / 4.0); // Rinse 2 duration, divider 4.0 makes it less important
+  Rinse2Duration = Rinse2Duration * 4;
+  byte ClearRinseDuration = (ClearRinseDurations[8] * CustomCoefficient / 2.0); // Clear Rinse duration, divider 2.0 makes it more important
+  ClearRinseDuration = ClearRinseDuration * 2;
+  byte DryDuration = (DryDurations[8] * CustomCoefficient / 4.0); // Drying duration, divider 4.0 makes it less important
+  DryDuration = DryDuration * 4;
   wMatrixCycle (ProgramName, PreWashDuration, WashDuration, Rinse1Duration, Rinse2Duration, ClearRinseDuration, DryDuration, CustomDuration, CustomTemp);
   Finish();
   Serial.println(F("wCustom ended.")); //temp
@@ -945,6 +962,7 @@ void setup() {
   pinMode(RinseAidSolen, OUTPUT);
   pinMode(drainPump, OUTPUT);
   pinMode(inletValve, OUTPUT);
+  pinMode(buzzer, OUTPUT);
   pinMode(startBtn, INPUT_PULLUP);
   pinMode(doorBtn, INPUT_PULLUP);
   // pinMode(errorSens, INPUT);
@@ -959,6 +977,7 @@ void setup() {
   digitalWrite(RinseAidSolen, LOW);
   digitalWrite(regenSolen, LOW);
   digitalWrite(fillSens, LOW);
+  digitalWrite(buzzer, LOW);
   // attachInterrupt(digitalPinToInterrupt(doorBtn), actDoorBtn, FALLING);
   // attachInterrupt(digitalPinToInterrupt(3), actErrorSens, FALLING);
   Serial.println("setup ended."); //temp
