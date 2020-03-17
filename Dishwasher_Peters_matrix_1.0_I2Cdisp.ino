@@ -2,9 +2,9 @@
 //Peter Nikolov's Dishwasher v.1.0.
 //Programer: Peter Nikolov.
 //Based on Rivera_1.0 by Pedro Rivera and the work of steve8428 - Thank you.
-//A dishwasher controller with different wash programs defined via a matrix of constants,
-//using temperature control thermistor 10k and a potentiometer 50k for program selector.
-//6 relay control, opto-isolator adviceable.
+//A dishwasher controller with different wash programs defined via a matrix of constants, 
+//also includes a Custom programme - allows user selection of custom temperature and wash time, and constructs a washing cycle to fulfill the custom parameters.
+//Using temperature control thermistor 10k and a potentiometer 50k for program selector, 6-7 relays control, opto-isolator adviceable.
 //Licensed under Creative Commons.
 
 // #include <LiquidCrystal.h>
@@ -38,7 +38,7 @@ const String ProgramVersion = "1.0";
 const int NumberOfPrograms = 9;
 const String ProgramNames[] = {"Select", "Intensive Wash", "Normal Wash", "Eco Wash", "Fast Wash", "Express Strong", "Cold Wash", "Rinse Only", "Custom"}; // Names of programs
 const byte HighestTemperatures[] = {0, 65, 60, 48, 36, 60, 5, 20, 65}; // Highest allowed temperatures for programs in degrees Celsius
-const byte ExpectedDurations[] =  {0, 120, 100, 80, 40, 50, 55, 20, 120}; // Expected durations of programs in minutes
+const byte ExpectedDurations[] =  {0, 120, 100, 80, 40, 50, 55, 20, 125}; // Expected durations of programs in minutes
 const int KeySelectAnalogValues[] =  {0, 150, 300, 450, 600, 750, 850, 950, 1050}; // Analog boundaries of the programs for the selector analog input
 const byte MatrixStructure[] =  {0, 1, 1, 0, 1, 1, 1, 1, 0}; // 1 = matrix structure; 0 = custom program
 const byte PreWashDurations[] =  {0, 12, 2, 8, 0, 0, 0, 0, 15}; // Pre-wash durations per programs in minutes; 0 = no Pre-wash
@@ -93,20 +93,20 @@ int onButtonCount = 0;                //switch case statement to control what ea
 //General actions
 
 
-void TotalTimeElapsed() {
+void TotalTimeElapsed() {  // Total time counter with countdown time display on screen
   TotalPeriodElapsed = (millis() - TotalPeriodStart - pauseTime);
   lcd.setCursor(13, 0);
   lcd.print(ExpDuration - (TotalPeriodElapsed / 60000));
   lcd.print("' ");
 }
 
-void timeElapsed() {
+void timeElapsed() { // Time counter
   periodElapsed = (millis() - periodStart);
   TotalTimeElapsed();
   onOffFun();
 }
 
-void waitXmsec(unsigned long WaitDuration) {
+void waitXmsec(unsigned long WaitDuration) { // Wait X milliseconds
   unsigned long waitStart = millis();
   while ((millis() - waitStart) < WaitDuration) {
     timeElapsed();
@@ -115,11 +115,11 @@ void waitXmsec(unsigned long WaitDuration) {
   }
 }
 
-void waitThreeSec() {
+void waitThreeSec() {  // Wait 3 seconds
   waitXmsec (3000);
 }
 
-double waterTemp() { //subroutine taken from www.neonsquirt.com/
+double waterTemp() { // Water temperature measurement - subroutine taken from www.neonsquirt.com/
   if (arrayIndex > 23) { //which in its turn was taken from Arduino Playground
     arrayIndex = 0;
   }
@@ -149,7 +149,7 @@ double waterTemp() { //subroutine taken from www.neonsquirt.com/
 }
 
 
-void dispTemp() {
+void dispTemp() { // Display current temperature on screen
   lcd.setCursor(12, 1);
   lcd.print(int(waterTemp()));
   lcd.print((char)223);
@@ -163,7 +163,7 @@ void dispTemp() {
 void(* resetFunc) (void) = 0; // Declaration of reset function
 
 
-void Finish() {
+void Finish() { // Washing programme finished
   Serial.println(F("Finish started.")); //temp
   lcd.clear();
   lcd.setCursor(0, 0);
@@ -182,7 +182,7 @@ void Finish() {
 }
 
 
-void actDoorBtn() { // swich door action
+void actDoorBtn() { // Door swich action
   Serial.println(F("actDoorBtn started.")); //temp
   pauseFun();
   Serial.println(F("Machine paused due to open door.")); //temp
@@ -195,7 +195,7 @@ void actDoorBtn() { // swich door action
   Serial.println(F("actDoorBtn ended.")); //temp
 }
 
-void stopFun() {  // stop all parts of the machine
+void stopFun() {  // Stop all parts of the machine
   Serial.println(F("stopFun started.")); //temp
   digitalWrite(inletValve, LOW);
   digitalWrite(heater, LOW);
@@ -208,7 +208,7 @@ void stopFun() {  // stop all parts of the machine
   Serial.println(F("stopFun ended.")); //temp
 }
 
-void pauseFun() { //stop all wash processes and raise pause flag
+void pauseFun() { // Pause - stop all wash processes and raise pause flag
   //Serial.println("pauseFun started."); //temp
   if (pause == false) {
     tone (buzzer, 600, 500); // Buzz for 500 milliseconds with frequency 700 Hz
@@ -229,7 +229,7 @@ void pauseFun() { //stop all wash processes and raise pause flag
   // Serial.println("pauseFun ended."); //temp
 }
 
-void resumeFun() { //stop all wash processes
+void resumeFun() { // Resume wash processes after pause
   Serial.println(F("resumeFun started.")); //temp
   lcd.setCursor(0, 1);
   lcd.print(F("Resuming...     "));
@@ -255,7 +255,7 @@ void resumeFun() { //stop all wash processes
 }
 
 
-void resetFun() { // Reset wash, drain washer and restart
+void resetFun() { // Reset wash, drain washer and restart machine
   lcd.clear();
   lcd.home (); // go home
   lcd.print(F("Machine reset...     "));
@@ -273,7 +273,7 @@ void resetFun() { // Reset wash, drain washer and restart
 }
 
 
-void actErrorSens() {
+void actErrorSens() { // Error sensor - to be developed
   Serial.println(F("actErrorSens started.")); //temp
   cli();
   stopFun();
@@ -287,7 +287,7 @@ void actErrorSens() {
 
 
 
-void errorFun() { //stop all wash processes and show fault code
+void errorFun() { // Error encountered - stop all wash processes and show fault code
   Serial.println(F("errorFun started.")); //temp
   tone (buzzer, 600, 3000); // Buzz for 3 seconds with frequency 600 Hz
   stopFun(); // Stop all wash processes
@@ -348,7 +348,7 @@ void errorFun() { //stop all wash processes and show fault code
 
 
 
-int readKey() { //read programs selector key
+int readKey() { // Read programs selector key
   selKeyIN = analogRead(keySelect); //read the value from the sensor
   // tone (buzzer, selKeyIN, 1000); // Buzz for 1 second and frequency according to selector
   for (int i = 0; i < NumberOfPrograms; i++) {
@@ -358,7 +358,7 @@ int readKey() { //read programs selector key
 }
 
 
-void selMenu() {
+void selMenu() { // Select a program
   Serial.println(F("selMenu started.")); //temp
   lcd.setCursor(0, 0);
   lcd.print(F("Select a program"));
@@ -427,7 +427,7 @@ int onOffFun () { // On/Pause/Resume/Reset Button
 //Washing actions
 
 
-void actDrain() {
+void actDrain() { // Drain machine
   Serial.println(F("actDrain started.")); //temp
   TotalTimeElapsed();
   lcd.setCursor(0, 1);
@@ -465,7 +465,7 @@ void actDrain() {
 }
 
 
-void actFill() {
+void actFill() { // Fill water
   Serial.println(F("actFill started.")); //temp
   int HeaterStatus = digitalRead(heater); // Save heater state
   int WashPumpStatus = digitalRead(washPump); // Save washPump state
@@ -538,7 +538,7 @@ void actFill() {
   Serial.println("actFill ended.");  //temp
 }
 
-void actCheckFillLevel() {
+void actCheckFillLevel() { // Check current water level
   // fillSensState = digitalRead(fillSens); //temporarily removed - to be reused
   // fillSensState = HIGH; //temp - to be removed
   if (fillSensState == LOW) {  // Fill sensor LOW
@@ -551,7 +551,7 @@ void actCheckFillLevel() {
 }
 
 
-void actHeaterON() {
+void actHeaterON() { // Turn heater on
   actCheckFillLevel();
   onOffFun();
   dispTemp ();
@@ -562,7 +562,7 @@ void actHeaterON() {
 }
 
 
-void actHeaterOFF() {
+void actHeaterOFF() { // Turn heater off
   onOffFun();
   dispTemp ();
   if (digitalRead(heater) == HIGH) {
@@ -572,7 +572,7 @@ void actHeaterOFF() {
 }
 
 
-void actCheckForHeatAlarms(int TargetTemperature, unsigned long MaxDuration) {
+void actCheckForHeatAlarms(int TargetTemperature, unsigned long MaxDuration) {  // Check for heat alarms
   onOffFun();
   dispTemp ();
   actCheckFillLevel();
@@ -599,7 +599,7 @@ void actCheckForHeatAlarms(int TargetTemperature, unsigned long MaxDuration) {
   dispTemp ();
 }
 
-void actKeepTemp(unsigned int KeepTemperature, unsigned int KeepDuration, byte Detergent) {
+void actKeepTemp(unsigned int KeepTemperature, unsigned int KeepDuration, byte Detergent) { // Reach and maintain given temperature for given time, with or without detergent dispensing
   Serial.print(F("actKeepTemp started at ")); //temp
   Serial.print(KeepTemperature); //temp
   Serial.print(F(" degrees, for ")); //temp
@@ -657,7 +657,7 @@ void actKeepTemp(unsigned int KeepTemperature, unsigned int KeepDuration, byte D
 }
 
 
-void actWashCycle(unsigned int WashCycleTemperature, unsigned int WashCycleDuration, byte Detergent, byte RinseAid, String SubCycleName1) {
+void actWashCycle(unsigned int WashCycleTemperature, unsigned int WashCycleDuration, byte Detergent, byte RinseAid, String SubCycleName1) { // Basic wash cycle engine
   Serial.print(F("actWashCycle started at ")); //temp
   Serial.print(WashCycleTemperature); //temp
   Serial.print(F(" degrees, for ")); //temp
@@ -712,7 +712,7 @@ void actWashCycle(unsigned int WashCycleTemperature, unsigned int WashCycleDurat
 //Washing sub-cycles
 
 
-void actDry(byte DryDur) {
+void actDry(byte DryDur) { // Dry sub-cycle
   Serial.println(F("actDry started.")); //temp
   TotalTimeElapsed();
   lcd.setCursor(0, 1);
@@ -745,7 +745,7 @@ void actDry(byte DryDur) {
 //Washing programs
 
 
-void wMatrixProgram(byte ProgramIndex) {  // Matrix program
+void wMatrixProgram(byte ProgramIndex) {  // Matrix program engine
   Serial.println(F("wMatrixProgram started.")); //temp
   ProgramName = ProgramNames[ProgramIndex]; // Program name
   byte PreWashDuration = PreWashDurations[ProgramIndex]; // Pre-wash duration
@@ -765,7 +765,7 @@ void wMatrixProgram(byte ProgramIndex) {  // Matrix program
 }
 
 
-void wMatrixCycle(String ProgramName, byte PreWashDuration, byte WashDuration,  byte Rinse1Duration, byte Rinse2Duration, byte ClearRinseDuration, byte DryDuration, byte ExpDuration, byte tempLimit ) { // Matrix cycle
+void wMatrixCycle(String ProgramName, byte PreWashDuration, byte WashDuration,  byte Rinse1Duration, byte Rinse2Duration, byte ClearRinseDuration, byte DryDuration, byte ExpDuration, byte tempLimit ) { // Main cycle engine
   Serial.println(F("wMatrixCycle started.")); //temp
   Serial.print(F("Program: ")); //temp
   Serial.print(ProgramName); //temp
@@ -826,7 +826,7 @@ void wMatrixCycle(String ProgramName, byte PreWashDuration, byte WashDuration,  
 
 
 
-void wEconom() {  // Index = btnEconom
+void wEconom() {  // Eco programme
   Serial.println(F("wEconom started.")); //temp
   ExpDuration = ExpectedDurations[3]; //Expected duration for Eco Wash
   tempLimit = HighestTemperatures[3]; // Max temperature for Eco Wash
@@ -863,7 +863,7 @@ void wEconom() {  // Index = btnEconom
 }
 
 
-void wCustom() {  // Custom program
+void wCustom() {  // Custom programme - allows user selection of custom temperature and wash time, and constructs a washing cycle to fulfill the custom parameters
   Serial.println(F("wCustom started.")); //temp
   ExpDuration = ExpectedDurations[8]; //Expected duration for Custom Wash
   tempLimit = HighestTemperatures[8]; // Max temperature for Custom Wash
@@ -956,8 +956,8 @@ void setup() {
   digitalWrite(regenSolen, LOW);
   digitalWrite(fillSens, LOW);
   digitalWrite(buzzer, LOW);
-  // attachInterrupt(digitalPinToInterrupt(doorBtn), actDoorBtn, FALLING);
-  // attachInterrupt(digitalPinToInterrupt(3), actErrorSens, FALLING);
+  // attachInterrupt(digitalPinToInterrupt(doorBtn), actDoorBtn, FALLING); // Not used at this time - door switch is currently checked via polling together with the On/Off button
+  // attachInterrupt(digitalPinToInterrupt(3), actErrorSens, FALLING); // For future use
   Serial.println("setup ended."); //temp
 }
 
@@ -986,7 +986,7 @@ void loop() {
       wMatrixProgram(lcdKeyMenu);
       break;
     case 3:
-      wEconom();
+      wEconom(); // Eco program - not matrix
       break;
     case 4:
       wMatrixProgram(lcdKeyMenu);
@@ -1001,7 +1001,7 @@ void loop() {
       wMatrixProgram(lcdKeyMenu);
       break;
     case 8:
-      wCustom();
+      wCustom(); // Custom program - not matrix
       break;
   }
   Serial.println(F("loop ended.")); //temp
