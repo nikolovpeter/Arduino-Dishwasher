@@ -162,7 +162,7 @@ int StartButtonFunction() { // Start/Pause/Resume/Reset Button
     if ((StartButtonState == LOW) && ((millis() - LastButtonDebounceTime) >= ResetButtonDebounceDelay)) { // button held down long enough to count as Reset
       StartButtonLastState = StartButtonState;
       StartButtonCode = 4;
-      ResetFunctiontion(); // Reset the machine.
+      ResetFunction(); // Reset the machine.
       StartButtonCode = 0;
       return StartButtonCode;
     }
@@ -188,7 +188,7 @@ int StartButtonFunction() { // Start/Pause/Resume/Reset Button
         StartButtonCode = 1;
         break;
       case 4:             // button pushed for so long as to count as reset
-        ResetFunctiontion();
+        ResetFunction();
         StartButtonCode = 0;
     }
   }
@@ -202,7 +202,7 @@ int StartButtonFunction() { // Start/Pause/Resume/Reset Button
 
 
 
-void(* ResetFunction) (void) = 0; // Declaration of reset function
+void (* InitiateResetFunction) (void) = 0; // Declaration of reset function
 
 
 void FinishProgrammeFunction() { // Washing programme finished
@@ -258,7 +258,7 @@ void PausedStateFunction() { // PausedState - stop all wash processes and raise 
   if (PausedState == false) {
     tone (Buzzer, 600, 500); // Buzz for 500 milliseconds with frequency 700 Hz
     PausedState = true;
-    Serial.println(F("PausedState started.")); //temp
+    Serial.println(F("Paused state started... ")); //temp
     StopTime = millis();
     PrePausedStateHeater = digitalRead(Heater);
     PrePausedStateWashPump = digitalRead(WashPump);
@@ -269,7 +269,7 @@ void PausedStateFunction() { // PausedState - stop all wash processes and raise 
     PrePausedStateRegenerationSolenoid = digitalRead(RegenerationSolenoid);
     StopAllFunction();
     lcd.setCursor(0, 1);
-    lcd.print(F("PausedStated          "));
+    lcd.print(F("Paused... "));
   }
   // Serial.println("PausedStateFun ended."); //temp
 }
@@ -300,7 +300,7 @@ void ResumeFunction() { // Resume wash processes after PausedState
 }
 
 
-void ResetFunctiontion() { // Reset wash, drain washer and restart machine
+void ResetFunction() { // Reset wash, drain washer and restart machine
   Serial.println(F("resetFun started.")); //temp
   lcd.clear();
   lcd.home (); // go home
@@ -315,7 +315,7 @@ void ResetFunctiontion() { // Reset wash, drain washer and restart machine
   delay(2000); //Wait for 2 seconds
   // Restart machine
   Serial.println(F("Restarting machine...")); //temp
-  ResetFunction (); // Restart machine
+  InitiateResetFunction (); // Restart machine
 }
 
 
@@ -993,7 +993,7 @@ void loop() {
   tone (Buzzer, 700, 300); // Buzz for 300 milliseconds with frequency 700 Hz - selected programme starting
   switch (MenuSelectorValue) {
     case 0:
-      ResetFunctiontion(); // Drain and restart machine
+      ResetFunction(); // Drain and restart machine
       break;
     case 1:
       MatrixProgramme(MenuSelectorValue);
