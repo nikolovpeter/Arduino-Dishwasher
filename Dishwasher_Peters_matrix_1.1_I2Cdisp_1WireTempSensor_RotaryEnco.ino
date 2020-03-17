@@ -1,10 +1,10 @@
 
-//Peter Nikolov's Dishwasher v.1.0.
+//Peter Nikolov's Dishwasher v.1.1.
 //Programer: Peter Nikolov.
 //Based on Rivera_1.0 by Pedro Rivera and the work of steve8428 - Thank you.
 //A dishwasher controller with different wash programs defined via a matrix of constants,
 //also includes a Custom programme - allows user selection of custom temperature and wash time, and constructs a washing cycle to fulfill the custom parameters.
-//Using temperature control thermistor 10k and a potentiometer 50k for program selector, 6-7 relays control, opto-isolator adviceable.
+//Using Dallas OneWire thermometer and rotary encoder for program selector, 6-7 relays control, opto-isolator adviceable.
 //Licensed under Creative Commons.
 
 // #include <LiquidCrystal.h>
@@ -28,7 +28,6 @@ rgb_lcd lcd;
 #define regenSolen A5 //regeneration solenoid 
 #define doorBtn 12 //door button
 //#define errorSens 11 //overfill sensor error
-//#define keySelect A0 //select key
 #define startBtn A0 //start/pause/resume/reset button
 #define RotaryEncoderPinA A1 // Rotary Encoder DT
 #define RotaryEncoderPinB A2 // Rotary Encoder CLK
