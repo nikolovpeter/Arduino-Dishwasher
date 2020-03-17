@@ -160,6 +160,9 @@ void dispTemp() {
 // Program flow actions
 
 
+void(* resetFunc) (void) = 0; // Declaration of reset function
+
+
 void Finish() {
   Serial.println(F("Finish started.")); //temp
   lcd.clear();
@@ -174,7 +177,7 @@ void Finish() {
   tone (buzzer, 700, 250); // Buzz for 250 milliseconds with frequency 700 Hz
   while (true) {
     onOffFun();
-    };
+  };
   Serial.println(F("Finish ended.")); //temp
 }
 
@@ -253,45 +256,20 @@ void resumeFun() { //stop all wash processes
 
 
 void resetFun() { // Reset wash, drain washer and restart
+  lcd.clear();
   lcd.home (); // go home
-  lcd.setCursor(0, 0);
   lcd.print(F("Machine reset...     "));
-  lcd.setCursor(0, 1);
-  lcd.print(F("                     "));
   tone (buzzer, 700, 1000); // Buzz for 1000 milliseconds with frequency 700 Hz
   stopFun();  // Stop all devices
+  delay(2000); //Wait for 2 seconds
   actDrain(); // Drain
-  // Initialize all variables
-  onButtonCount = 0;
-  TotalFillTime = 0;
-  CurrentFillStart = 0;
-  ExpDuration = 0;
-  arrayIndex = 0;
-  lcdKeyMenu = 0;
-  selKeyIN = 0;
-  fillSensState = 0;
-  x = 0;
-  Prepauseheater = 0;
-  PrepausewashPump = 0;
-  PrepauseDetergentSolen = 0;
-  PrepausedrainPump = 0;
-  PrepauseinletValve = 0;
-  PrepauseRinseAidSolen = 0;
-  PrepauseregenSolen = 0;
-  ProgramName = F("                ");
-  SubCycleName = F("                ");
-  faultCode = 0;
-  startBtnState = HIGH;
-  O_buttonState = HIGH;
-  O_lastButtonState = HIGH;
-  lastDebounceTime = 0;
-  onButtonCount = 0;
   pause = false;
   timeStopped = 0;
   pauseTime = 0;
+  delay(2000); //Wait for 2 seconds
   // Restart machine
-  setup();    // Restart code
-  loop();
+  Serial.println(F("Restarting machine...")); //temp
+  resetFunc (); // Restart machine
 }
 
 
@@ -419,9 +397,9 @@ int onOffFun () { // On/Pause/Resume/Reset Button
     if ((millis() - lastDebounceTime) >= debounceDelay) { // button held down long enough to count as normal push
       if (startBtnState != O_buttonState) {
         O_buttonState = startBtnState;
-        if (O_buttonState == LOW) { //If button has been pushed increment onButtonCount by 1
+        if (O_buttonState == HIGH) { //If button has been pushed for long enough time, and then released, increment onButtonCount by 1
           onButtonCount++;
-          tone (buzzer, 700, 200); // Buzz for 200 milliseconds with frequency 700 Hz
+          tone (buzzer, 700, 100); // Buzz for 100 milliseconds with frequency 700 Hz
         }
       }
     }
@@ -998,6 +976,8 @@ void loop() {
   selMenu();
   lcdKeyMenu = readKey(); // read key
   onOffFun();
+  delay(300);
+  tone (buzzer, 700, 200); // Buzz for 200 milliseconds with frequency 700 Hz
   switch (lcdKeyMenu) {
     case 1:
       wMatrixProgram(lcdKeyMenu);
