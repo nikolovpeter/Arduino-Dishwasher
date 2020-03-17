@@ -14,31 +14,30 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
-rgb_lcd lcd;
-
 //Pin assignment
-//LiquidCrystal lcd(8, 9, 10, 11, 12, 13);
-#define inletValve 4 //water inlet valve
-#define heater 5 //heater 
-#define washPump 6 //washpump
-#define drainPump 7 //drain pump
-#define DetergentSolen 8 //detergent dispenser solenoid 
-#define RinseAidSolen 9 //rinse aid dispenser solenoid
-#define buzzer 10 //buzzer/beeper 
-#define regenSolen A5 //regeneration solenoid 
-#define doorBtn 12 //door button
-//#define errorSens 11 //overfill sensor error
-#define startBtn A0 //start/pause/resume/reset button
+#define InletValve 4 //water inlet valve
+#define Heater 5 //Heater 
+#define WashPump 6 //WashPump
+#define DrainPump 7 //drain pump
+#define DetergentSolenoid 8 //detergent dispenser solenoid 
+#define RinseAidSolenoid 9 //rinse aid dispenser solenoid
+#define Buzzer 10 //Buzzer/beeper 
+#define RegenerationSolenoid A5 //regeneration solenoid 
+#define DoorSwitch 12 //door button
+//#define ErrorSensor 11 //overfill sensor error
+#define StartButton A0 //start/PausedState/resume/reset button
 #define RotaryEncoderPinA A1 // Rotary Encoder DT
 #define RotaryEncoderPinB A2 // Rotary Encoder CLK
-#define fillSens A3 //fill sensor
+#define WaterLevelSensor A3 //fill sensor
 #define ONE_WIRE_BUS 11 // OneWire interface (for thermometer)
+
+rgb_lcd lcd;
 
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 
 //constants declaration
-const String ProgramVersion = "1.1";
+const String SoftwareVersion = "1.1";
 const int NumberOfPrograms = 9;
 const String ProgramNames[] = {"Restart", "Intensive Wash", "Normal Wash", "Eco Wash", "Fast Wash", "Express Strong", "Cold Wash", "Rinse Only", "Custom"}; // Names of programs
 const byte HighestTemperatures[] = {0, 65, 60, 48, 36, 60, 5, 20, 65}; // Highest allowed temperatures for programs in degrees Celsius
@@ -50,78 +49,77 @@ const byte Rinse1Durations[] =  {0, 6, 6, 6, 6, 6, 6, 10, 14}; // Rinse 1 durati
 const byte Rinse2Durations[] =  {0, 6, 6, 2, 2, 2, 6, 0, 11}; // Rinse 2 durations per programs in minutes; 0 = no Rinse 2
 const byte ClearRinseDurations[] =  {0, 10, 10, 10, 10, 10, 10, 0, 20}; // Clear Rinse durations per programs in minutes; 0 = no Clear Rinse
 const byte DryDurations[] =  {0, 11, 11, 11, 2, 2, 1, 1, 12}; // Drying durations per programs in minutes; 0 = no Drying
-const int debounceDelay = 15; // delay to count as button pressed - 15 milliseconds
-const int R_debounceDelay = 5000; // delay to count as reset - 5 seconds
+const int ButtonDebounceDelay = 15; // delay to count as button pressed - 15 milliseconds
+const int ResetButtonDebounceDelay = 5000; // delay to count as reset - 5 seconds
 const int OverheatLimit = 72; // Temperature limit to count for overheating
 
 //variables declaration
-volatile int doorBtnState = HIGH;
-volatile byte pause = false;
-volatile unsigned long timeStopped = 0;      // Record time program was paused
-volatile unsigned long pauseTime = 0;        //record how long the program was paused for
-volatile byte Prepauseheater;
-volatile byte PrepausewashPump;
-volatile byte PrepauseDetergentSolen;
-volatile byte PrepausedrainPump;
-volatile byte PrepauseinletValve;
-volatile byte PrepauseRinseAidSolen;
-volatile byte PrepauseregenSolen;
-volatile int faultCode = 0;
-unsigned long TotalPeriodStart, TotalPeriodElapsed;
-unsigned long periodStart, periodElapsed;
-unsigned long TotalFillTime = 0, CurrentFillStart = 0;
-int ExpDuration = 0; //Expected program duration in minutes
-int lcdKeyMenu = 0;
-int selKeyIN = 0;
-unsigned long CustomTemp = 0;
+volatile int DoorSwitchState;
+volatile byte PausedState = false;
+volatile unsigned long StopTime = 0;       // Record time program was paused
+volatile unsigned long PausedDuration = 0; // Record how long the program was paused for
+volatile byte PrePausedStateHeater;
+volatile byte PrePausedStateWashPump;
+volatile byte PrePausedStateDetergentSolenoid;
+volatile byte PrePausedStateDrainPump;
+volatile byte PrePausedStateInletValve;
+volatile byte PrePausedStateRinseAidSolenoid;
+volatile byte PrePausedStateRegenerationSolenoid;
+volatile int FaultCode = 0;
+unsigned long TotalPeriodStart, TotalPeriodDuration;
+unsigned long CurrentPeriodStart, CurrentPeriodDuration;
+unsigned long CurrentFillStart = 0, TotalFillDuration = 0;
+int ExpectedDuration = 0; //Expected program duration in minutes
+int MenuSelectorValue = 0;
+int SelectorDialValue = 0;
+unsigned long CustomTemperature = 0;
 unsigned long CustomDuration = 0;
 double CustomCoefficient;
-int fillSensState = 0;
-int tempLimit = 0;
-int x = 0;
-int RawADC = 240; //temporary temperature around 0 degrees Celsius - to be removed
+int WaterLevelSensorState = 0;
+int TemperatureLimit = 0;
+// int RawADC = 240; //temporary temperature around 0 degrees Celsius - to be removed
 String ProgramName = "                ";
 String SubCycleName = "                ";
-//-----On/pause/restart/reset Button reference ------
-int RotaryEncoderPos = 0;
+//-----On/PausedState/restart/reset Button reference ------
+int RotaryEncoderPosition = 0;
 int RotaryEncoderPinALast = LOW;
-int startBtnState = HIGH;
-int O_buttonState = HIGH;
-int O_lastButtonState = HIGH;
-unsigned long lastDebounceTime = 0;
-int onButtonCount = 0;  //switch case statement to control what each button push does
+int StartButtonState = HIGH;
+int StartButtonRecentState = HIGH;
+int StartButtonLastState = HIGH;
+unsigned long LastButtonDebounceTime = 0;
+int StartButtonCode = 0;  //switch case statement to control what each button push does
 
 
 //General actions
 
 
-void TotalTimeElapsed() {  // Total time counter with countdown time display on screen
-  TotalPeriodElapsed = (millis() - TotalPeriodStart - pauseTime);
+void TotalTimeElapsedFunction() {  // Total time counter with countdown time display on screen
+  TotalPeriodDuration = (millis() - TotalPeriodStart - PausedDuration);
   lcd.setCursor(13, 0);
-  lcd.print(ExpDuration - (TotalPeriodElapsed / 60000));
+  lcd.print(ExpectedDuration - (TotalPeriodDuration / 60000));
   lcd.print("' ");
 }
 
-void timeElapsed() { // Time counter
-  periodElapsed = (millis() - periodStart);
-  TotalTimeElapsed();
-  StartButtonFun();
+void TimeElapsedFunction() { // Time counter
+  CurrentPeriodDuration = (millis() - CurrentPeriodStart);
+  TotalTimeElapsedFunction();
+  StartButtonFunction();
 }
 
-void waitXmsec(unsigned long WaitDuration) { // Wait X milliseconds
+void WaitXmsecFunction(unsigned long WaitDuration) { // Wait X milliseconds
   unsigned long waitStart = millis();
   while ((millis() - waitStart) < WaitDuration) {
-    timeElapsed();
-    TotalTimeElapsed();
-    StartButtonFun();
+    TimeElapsedFunction();
+    TotalTimeElapsedFunction();
+    StartButtonFunction();
   }
 }
 
-void waitThreeSec() {  // Wait 3 seconds
-  waitXmsec (3000);
+void Wait3secFunction() {  // Wait 3 seconds
+  WaitXmsecFunction(3000);
 }
 
-double waterTemp() { // Measure water temperature
+double WaterTemperatureFunction() { // Measure water temperature
   double Temp;
   sensors.requestTemperatures();
   Temp = sensors.getTempCByIndex(0);
@@ -129,73 +127,73 @@ double waterTemp() { // Measure water temperature
 }
 
 
-void dispTemp() { // Display current temperature on screen
+void DisplayTemperatureFunction() { // Display current temperature on screen
   lcd.setCursor(12, 1);
-  lcd.print(int(waterTemp()));
+  lcd.print(int(WaterTemperatureFunction()));
   lcd.print((char)223);
   lcd.print("C ");
 }
 
 
-unsigned int keySelect(int StartPosition, int EndPosition) { // Read rotary encoder
+unsigned int EncoderSelectFunction(int StartPosition, int EndPosition) { // Read rotary encoder
   int RotaryEncoderPinAState = digitalRead(RotaryEncoderPinA);
   if ((RotaryEncoderPinALast == LOW) && (RotaryEncoderPinAState == HIGH)) {
     if (digitalRead(RotaryEncoderPinB) == LOW) {
-      RotaryEncoderPos--;
+      RotaryEncoderPosition--;
     } else {
-      RotaryEncoderPos++;
+      RotaryEncoderPosition++;
     }
-    tone (buzzer, 600, 7); // Buzz for 7 milliseconds with frequency 600 Hz
+    tone (Buzzer, 600, 7); // Buzz for 7 milliseconds with frequency 600 Hz
   }
   RotaryEncoderPinALast = RotaryEncoderPinAState;
-  if (RotaryEncoderPos < StartPosition) RotaryEncoderPos = StartPosition;
-  if (RotaryEncoderPos > EndPosition) RotaryEncoderPos = EndPosition;
-  return RotaryEncoderPos;
+  if (RotaryEncoderPosition < StartPosition) RotaryEncoderPosition = StartPosition;
+  if (RotaryEncoderPosition > EndPosition) RotaryEncoderPosition = EndPosition;
+  return RotaryEncoderPosition;
 }
 
 
-int StartButtonFun() { // On/Pause/Resume/Reset Button
-  if (digitalRead(doorBtn) == LOW) actDoorBtn();
-  do { // Start loop to check for "Paused" state
-    startBtnState = digitalRead(startBtn);
-    if (startBtnState != O_lastButtonState) { //meaning button changed state
-      lastDebounceTime = millis();
+int StartButtonFunction() { // Start/Pause/Resume/Reset Button
+  if (digitalRead(DoorSwitch) == LOW) DoorSwitchFunction();
+  do { // Start loop to check for "PausedStated" state
+    StartButtonState = digitalRead(StartButton);
+    if (StartButtonState != StartButtonLastState) { //meaning button changed state
+      LastButtonDebounceTime = millis();
     }
-    if ((startBtnState == LOW) && ((millis() - lastDebounceTime) >= R_debounceDelay)) { // button held down long enough to count as Reset
-      O_lastButtonState = startBtnState;
-      onButtonCount = 4;
-      resetFun(); // Reset the machine.
-      onButtonCount = 0;
-      return onButtonCount;
+    if ((StartButtonState == LOW) && ((millis() - LastButtonDebounceTime) >= ResetButtonDebounceDelay)) { // button held down long enough to count as Reset
+      StartButtonLastState = StartButtonState;
+      StartButtonCode = 4;
+      ResetFunctiontion(); // Reset the machine.
+      StartButtonCode = 0;
+      return StartButtonCode;
     }
-    if ((millis() - lastDebounceTime) >= debounceDelay) { // button held down long enough to count as normal push
-      if (startBtnState != O_buttonState) {
-        O_buttonState = startBtnState;
-        if (O_buttonState == HIGH) { //If button has been pushed for long enough time, and then released, increment onButtonCount by 1
-          onButtonCount++;
-          tone (buzzer, 700, 100); // Buzz for 100 milliseconds with frequency 700 Hz
+    if ((millis() - LastButtonDebounceTime) >= ButtonDebounceDelay) { // button held down long enough to count as normal push
+      if (StartButtonState != StartButtonRecentState) {
+        StartButtonRecentState = StartButtonState;
+        if (StartButtonRecentState == HIGH) { //If button has been pushed for long enough time, and then released, increment StartButtonCode by 1
+          StartButtonCode++;
+          tone (Buzzer, 700, 100); // Buzz for 100 milliseconds with frequency 700 Hz
         }
       }
     }
-    O_lastButtonState = startBtnState;
-    switch (onButtonCount) { //At startup onButtonCount will == 0
-      case 1:              //Button pushed so onButtoncount == 1, start wash cycle, or continue unchanged if already onButtoncount == 1
-        return onButtonCount;
+    StartButtonLastState = StartButtonState;
+    switch (StartButtonCode) { //At startup StartButtonCode will == 0
+      case 1:              //Button pushed so StartButtonCode == 1, start wash cycle, or continue unchanged if already StartButtonCode == 1
+        return StartButtonCode;
         break;
-      case 2:             //Button pushed again during wash so call pause function
-        pauseFun();
+      case 2:             //Button pushed again during wash so call PausedState function
+        PausedStateFunction();
         break;
-      case 3:             // button pushed for 3rd time so call restartFun but take 1 down from onButtonCount
-        resumeFun();
-        onButtonCount = 1;
+      case 3:             // button pushed for 3rd time so call restartFun but take 1 down from StartButtonCode
+        ResumeFunction();
+        StartButtonCode = 1;
         break;
       case 4:             // button pushed for so long as to count as reset
-        resetFun();
-        onButtonCount = 0;
+        ResetFunctiontion();
+        StartButtonCode = 0;
     }
   }
-  while (onButtonCount == 2);
-  return onButtonCount;
+  while (StartButtonCode == 2);
+  return StartButtonCode;
 }
 
 
@@ -204,95 +202,95 @@ int StartButtonFun() { // On/Pause/Resume/Reset Button
 
 
 
-void(* resetFunc) (void) = 0; // Declaration of reset function
+void(* ResetFunction) (void) = 0; // Declaration of reset function
 
 
-void Finish() { // Washing programme finished
+void FinishProgrammeFunction() { // Washing programme finished
   Serial.println(F("Finish started.")); //temp
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print(F("Dishes are clean."));
   lcd.setCursor(0, 1);
   lcd.print(F("Press 'Off' btn."));
-  tone (buzzer, 700, 150); // Buzz for 150 milliseconds with frequency 700 Hz
+  tone (Buzzer, 700, 150); // Buzz for 150 milliseconds with frequency 700 Hz
   delay (400);
-  tone (buzzer, 700, 150); // Buzz for 150 milliseconds with frequency 700 Hz
+  tone (Buzzer, 700, 150); // Buzz for 150 milliseconds with frequency 700 Hz
   delay (400);
-  tone (buzzer, 700, 250); // Buzz for 250 milliseconds with frequency 700 Hz
+  tone (Buzzer, 700, 250); // Buzz for 250 milliseconds with frequency 700 Hz
   Serial.print(F("Programme actual duration: ")); //temp
-  Serial.print(TotalPeriodElapsed / 60000);
+  Serial.print(TotalPeriodDuration / 60000);
   Serial.println(F(" minutes.")); //temp
   while (true) {
-    StartButtonFun();
+    StartButtonFunction();
   };
   Serial.println(F("Finish ended.")); //temp
 }
 
 
-void actDoorBtn() { // Door swich action
-  Serial.println(F("actDoorBtn started.")); //temp
-  pauseFun();
-  Serial.println(F("Machine paused due to open door.")); //temp
-  doorBtnState = digitalRead(doorBtn);
-  while (doorBtnState == LOW && pause == true) {
-    doorBtnState = digitalRead(doorBtn);
+void DoorSwitchFunction() { // Door swich action
+  Serial.println(F("actDoorSwitch started.")); //temp
+  PausedStateFunction();
+  Serial.println(F("Machine PausedStated due to open door.")); //temp
+  DoorSwitchState = digitalRead(DoorSwitch);
+  while (DoorSwitchState == LOW && PausedState == true) {
+    DoorSwitchState = digitalRead(DoorSwitch);
   }
   Serial.println(F("Machine resumed after door closed.")); //temp
-  resumeFun();   //resume program
-  Serial.println(F("actDoorBtn ended.")); //temp
+  ResumeFunction();   //resume program
+  Serial.println(F("actDoorSwitch ended.")); //temp
 }
 
-void stopFun() {  // Stop all parts of the machine
+void StopAllFunction() {  // Stop all parts of the machine
   Serial.println(F("stopFun started.")); //temp
-  digitalWrite(inletValve, LOW);
-  digitalWrite(heater, LOW);
-  digitalWrite(washPump, LOW);
-  digitalWrite(drainPump, LOW);
-  digitalWrite(DetergentSolen, LOW);
-  digitalWrite(RinseAidSolen, LOW);
-  digitalWrite(regenSolen, LOW);
-  digitalWrite(buzzer, LOW);
+  digitalWrite(InletValve, LOW);
+  digitalWrite(Heater, LOW);
+  digitalWrite(WashPump, LOW);
+  digitalWrite(DrainPump, LOW);
+  digitalWrite(DetergentSolenoid, LOW);
+  digitalWrite(RinseAidSolenoid, LOW);
+  digitalWrite(RegenerationSolenoid, LOW);
+  digitalWrite(Buzzer, LOW);
   Serial.println(F("stopFun ended.")); //temp
 }
 
-void pauseFun() { // Pause - stop all wash processes and raise pause flag
-  //Serial.println("pauseFun started."); //temp
-  if (pause == false) {
-    tone (buzzer, 600, 500); // Buzz for 500 milliseconds with frequency 700 Hz
-    pause = true;
-    Serial.println(F("Pause started.")); //temp
-    timeStopped = millis();
-    Prepauseheater = digitalRead(heater);
-    PrepausewashPump = digitalRead(washPump);
-    PrepauseDetergentSolen = digitalRead(DetergentSolen);
-    PrepausedrainPump = digitalRead(drainPump);
-    PrepauseinletValve = digitalRead(inletValve);
-    PrepauseRinseAidSolen = digitalRead(RinseAidSolen);
-    PrepauseregenSolen = digitalRead(regenSolen);
-    stopFun();
+void PausedStateFunction() { // PausedState - stop all wash processes and raise PausedState flag
+  //Serial.println("PausedStateFun started."); //temp
+  if (PausedState == false) {
+    tone (Buzzer, 600, 500); // Buzz for 500 milliseconds with frequency 700 Hz
+    PausedState = true;
+    Serial.println(F("PausedState started.")); //temp
+    StopTime = millis();
+    PrePausedStateHeater = digitalRead(Heater);
+    PrePausedStateWashPump = digitalRead(WashPump);
+    PrePausedStateDetergentSolenoid = digitalRead(DetergentSolenoid);
+    PrePausedStateDrainPump = digitalRead(DrainPump);
+    PrePausedStateInletValve = digitalRead(InletValve);
+    PrePausedStateRinseAidSolenoid = digitalRead(RinseAidSolenoid);
+    PrePausedStateRegenerationSolenoid = digitalRead(RegenerationSolenoid);
+    StopAllFunction();
     lcd.setCursor(0, 1);
-    lcd.print(F("Paused          "));
+    lcd.print(F("PausedStated          "));
   }
-  // Serial.println("pauseFun ended."); //temp
+  // Serial.println("PausedStateFun ended."); //temp
 }
 
-void resumeFun() { // Resume wash processes after pause
+void ResumeFunction() { // Resume wash processes after PausedState
   Serial.println(F("resumeFun started.")); //temp
   lcd.setCursor(0, 1);
   lcd.print(F("Resuming...     "));
-  Serial.println(F("Resumed from pause.")); //temp
-  tone (buzzer, 800, 150); // Buzz for 150 milliseconds with frequency 700 Hz
+  Serial.println(F("Resumed from PausedState.")); //temp
+  tone (Buzzer, 800, 150); // Buzz for 150 milliseconds with frequency 700 Hz
   delay (400);
-  tone (buzzer, 800, 300); // Buzz for 300 milliseconds with frequency 700 Hz
-  pause = false;
-  pauseTime = millis() - timeStopped;
-  digitalWrite(heater, Prepauseheater);
-  digitalWrite(washPump, PrepausewashPump);
-  digitalWrite(DetergentSolen, PrepauseDetergentSolen);
-  digitalWrite(drainPump, PrepausedrainPump);
-  digitalWrite(inletValve, PrepauseinletValve);
-  digitalWrite(RinseAidSolen, PrepauseRinseAidSolen);
-  digitalWrite(regenSolen, PrepauseregenSolen);
+  tone (Buzzer, 800, 300); // Buzz for 300 milliseconds with frequency 700 Hz
+  PausedState = false;
+  PausedDuration = millis() - StopTime;
+  digitalWrite(Heater, PrePausedStateHeater);
+  digitalWrite(WashPump, PrePausedStateWashPump);
+  digitalWrite(DetergentSolenoid, PrePausedStateDetergentSolenoid);
+  digitalWrite(DrainPump, PrePausedStateDrainPump);
+  digitalWrite(InletValve, PrePausedStateInletValve);
+  digitalWrite(RinseAidSolenoid, PrePausedStateRinseAidSolenoid);
+  digitalWrite(RegenerationSolenoid, PrePausedStateRegenerationSolenoid);
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print(ProgramName);
@@ -302,62 +300,62 @@ void resumeFun() { // Resume wash processes after pause
 }
 
 
-void resetFun() { // Reset wash, drain washer and restart machine
+void ResetFunctiontion() { // Reset wash, drain washer and restart machine
   Serial.println(F("resetFun started.")); //temp
   lcd.clear();
   lcd.home (); // go home
   lcd.print(F("Machine reset...     "));
-  tone (buzzer, 700, 1000); // Buzz for 1000 milliseconds with frequency 700 Hz
-  stopFun();  // Stop all devices
+  tone (Buzzer, 700, 1000); // Buzz for 1000 milliseconds with frequency 700 Hz
+  StopAllFunction();  // Stop all devices
   delay(2000); //Wait for 2 seconds
-  actDrain(); // Drain
-  pause = false;
-  timeStopped = 0;
-  pauseTime = 0;
+  DrainAction(); // Drain
+  PausedState = false;
+  StopTime = 0;
+  PausedDuration = 0;
   delay(2000); //Wait for 2 seconds
   // Restart machine
   Serial.println(F("Restarting machine...")); //temp
-  resetFunc (); // Restart machine
+  ResetFunction (); // Restart machine
 }
 
 
-void actErrorSens() { // Error sensor - to be developed
-  Serial.println(F("actErrorSens started.")); //temp
+void ErrorSensororFunction() { // Error sensor - to be developed
+  Serial.println(F("ErrorSensororFunction started.")); //temp
   cli();
-  stopFun();
+  StopAllFunction();
   lcd.setCursor(0, 0);
   lcd.print(F("ERROR - DISCONNECT"));
   lcd.setCursor(0, 1);
   lcd.print(F("THE DISHWASHER FROM SOCKET"));
   while (true) {};
-  Serial.println(F("actErrorSens ended.")); //temp
+  Serial.println(F("ErrorSensororFunction ended.")); //temp
 }
 
 
 
-void errorFun() { // Error encountered - stop all wash processes and show fault code
-  Serial.println(F("errorFun started.")); //temp
-  tone (buzzer, 600, 3000); // Buzz for 3 seconds with frequency 600 Hz
-  stopFun(); // Stop all wash processes
+void ErrorFunction() { // Error encountered - stop all wash processes and show fault code
+  Serial.println(F("ErrorFunction started.")); //temp
+  tone (Buzzer, 600, 3000); // Buzz for 3 seconds with frequency 600 Hz
+  StopAllFunction(); // Stop all wash processes
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print(F("ERROR Fault:    "));
   lcd.setCursor(12, 0);
-  lcd.print(faultCode);
+  lcd.print(FaultCode);
   lcd.setCursor(0, 1);
   lcd.print(F("Machine halted.  "));
   String faultDescription;
-  switch (faultCode) {
+  switch (FaultCode) {
     case 20:
       faultDescription = F("20: Over-heating - temperature exceeds ");
       faultDescription = faultDescription + OverheatLimit ;
       faultDescription = faultDescription +  F(" degrees Celsius. All wash processes stopped.");
       break;
     case 21:
-      faultDescription = F("21: Water temperature not reached after 25 minutes of heating - possible heater malfunction. Water drained. All wash processes stopped.");
+      faultDescription = F("21: Water temperature not reached after 25 minutes of heating - possible Heater malfunction. Water drained. All wash processes stopped.");
       break;
     case 30:
-      faultDescription = F("30: Heater ON while wash pump OFF - possible wash pump malfunction or heater does not turn off. All wash processes stopped. There may be water in the machine.");
+      faultDescription = F("30: Heater ON while wash pump OFF - possible wash pump malfunction or Heater does not turn off. All wash processes stopped. There may be water in the machine.");
       break;
     case 40:
       faultDescription = F("40: Water level high after 3 minutes of draining - possible drain pump malfunction or water outlet blocked. All wash processes stopped. There may be water in the machine.");
@@ -370,7 +368,7 @@ void errorFun() { // Error encountered - stop all wash processes and show fault 
       break;
     default:
       faultDescription = F(": Unspecified error.");
-      faultDescription = faultCode + faultDescription;
+      faultDescription = FaultCode + faultDescription;
       break;
   }
   Serial.print(F("ERROR! Fault code = "));
@@ -379,7 +377,7 @@ void errorFun() { // Error encountered - stop all wash processes and show fault 
   /* Fault codes general groups:
     ======= Fault Codes ====================
     10 - 19 - inlet valve faults;
-    20 - 29 - heater circuit faults;
+    20 - 29 - Heater circuit faults;
     30 - 39 - wash pump circuit faults;
     40 - 49 - drain pump circuit faults;
     50 - 59 - water leakage faults;
@@ -391,248 +389,251 @@ void errorFun() { // Error encountered - stop all wash processes and show fault 
     110 - 119 - general faults.
     ========================================
   */
-  Serial.println(F("errorFun ended.")); //temp
+  Serial.println(F("ErrorFunction ended.")); //temp
 }
 
 
 //Washing actions
 
 
-void actDrain() { // Drain machine
-  Serial.println(F("    actDrain started.")); //temp
-  TotalTimeElapsed();
+void DrainAction() { // Drain machine
+  Serial.println(F("    DrainAction started.")); //temp
+  TotalTimeElapsedFunction();
   lcd.setCursor(0, 1);
   lcd.print(F("Draining...     "));
-  actHeaterOFF();                      // Heater OFF
-  digitalWrite(washPump, LOW);         // Wash pump OFF
-  waitThreeSec();
-  unsigned long DrainStartPauseTime = pauseTime;   // Save pause time at start of draining
-  //fillSensState = digitalRead(fillSens); //temporarily removed - to be reused
-  if (fillSensState == HIGH) {         // Fill sensor HIGH - start draining
-    periodStart = millis();
-    timeElapsed();
-    digitalWrite(drainPump, HIGH);     // Drain pump ON
-    //fillSensState = digitalRead(fillSens); //temporarily removed - to be reused
-    while (fillSensState == HIGH) {
-      timeElapsed();
-      if ((periodElapsed - (pauseTime - DrainStartPauseTime)) >= 180000) {   // Check if draining continuing for more than 3 minutes
-        digitalWrite(drainPump, LOW);     // Drain pump OFF
-        faultCode = 40; // Fault code 40: Water level sensor does not go LOW after 3 minutes of draining - water outlet blocked or drain pump malfunction.
-        errorFun();
+  HeaterOFFAction();                      // Heater OFF
+  digitalWrite(WashPump, LOW);         // Wash pump OFF
+  Wait3secFunction();
+  unsigned long DrainStartPausedDuration = PausedDuration;   // Save PausedState time at start of draining
+  //WaterLevelSensorState = digitalRead(WaterLevelSensor); //temporarily removed - to be reused
+  if (WaterLevelSensorState == HIGH) {         // Fill sensor HIGH - start draining
+    CurrentPeriodStart = millis();
+    TimeElapsedFunction();
+    digitalWrite(DrainPump, HIGH);     // Drain pump ON
+    //WaterLevelSensorState = digitalRead(WaterLevelSensor); //temporarily removed - to be reused
+    while (WaterLevelSensorState == HIGH) {
+      TimeElapsedFunction();
+      if ((CurrentPeriodDuration - (PausedDuration - DrainStartPausedDuration)) >= 180000) {   // Check if draining continuing for more than 3 minutes
+        digitalWrite(DrainPump, LOW);     // Drain pump OFF
+        FaultCode = 40; // Fault code 40: Water level sensor does not go LOW after 3 minutes of draining - water outlet blocked or drain pump malfunction.
+        ErrorFunction();
       }
-      digitalWrite(drainPump, HIGH);     // Drain pump ON
-      // fillSensState = digitalRead(fillSens); // temporarily removed - to be reused
-      waitXmsec (5000); //temp - to be removed
-      fillSensState = LOW; //temp - to be removed
-      StartButtonFun();
+      digitalWrite(DrainPump, HIGH);     // Drain pump ON
+      // WaterLevelSensorState = digitalRead(WaterLevelSensor); // temporarily removed - to be reused
+      WaitXmsecFunction(5000); //temp - to be removed
+      WaterLevelSensorState = LOW; //temp - to be removed
+      StartButtonFunction();
     }
   }
-  digitalWrite(drainPump, HIGH);      // Drain pump ON
-  waitXmsec (5000);                   // Wait 5 sec
-  digitalWrite(drainPump, LOW);       // Drain pump OFF
-  TotalFillTime = 0;  // Initialize fill timer
+  digitalWrite(DrainPump, HIGH);      // Drain pump ON
+  WaitXmsecFunction(5000);                   // Wait 5 sec
+  digitalWrite(DrainPump, LOW);       // Drain pump OFF
+  TotalFillDuration = 0;  // Initialize fill timer
   lcd.setCursor(0, 1);
   lcd.print(F("            "));
-  Serial.println(F("    actDrain ended.")); //temp
+  Serial.println(F("    DrainAction ended.")); //temp
 }
 
 
-void actFill() { // Fill water
-  Serial.println(F("    actFill started.")); //temp
-  int HeaterStatus = digitalRead(heater); // Save heater state
-  int WashPumpStatus = digitalRead(washPump); // Save washPump state
-  unsigned long FillStartPauseTime = pauseTime;   // Save pause time at start of filling
-  TotalTimeElapsed();
-  // fillSensState = digitalRead(fillSens); //temporarily removed - to be reused
-  // fillSensState = 0; //temp - to be removed
-  if (fillSensState == 0) {          // Fill sensor LOW - start filling
+void FillAction() { // Fill water
+  Serial.println(F("    FillAction started.")); //temp
+  int HeaterStatus = digitalRead(Heater); // Save Heater state
+  int WashPumpStatus = digitalRead(WashPump); // Save WashPump state
+  unsigned long FillStartPausedDuration = PausedDuration;   // Save PausedState time at start of filling
+  TotalTimeElapsedFunction();
+  // WaterLevelSensorState = digitalRead(WaterLevelSensor); //temporarily removed - to be reused
+  // WaterLevelSensorState = 0; //temp - to be removed
+  if (WaterLevelSensorState == 0) {          // Fill sensor LOW - start filling
     lcd.setCursor(0, 1);
     lcd.print(F("Filling...  "));
-    dispTemp ();
-    StartButtonFun ();
-    actHeaterOFF();                    // Heater OFF
-    periodStart = millis();
-    timeElapsed();
+    DisplayTemperatureFunction();
+    StartButtonFunction();
+    HeaterOFFAction();                    // Heater OFF
+    CurrentPeriodStart = millis();
+    TimeElapsedFunction();
     CurrentFillStart = millis();
-    digitalWrite(inletValve, HIGH);    // Inlet valve ON
-    waitXmsec (7000);                  // Wait 7 sec
-    digitalWrite(washPump, HIGH);      // Wash pump ON
-    digitalWrite(inletValve, HIGH);    // Inlet valve ON
-    //fillSensState = digitalRead(fillSens); //temporarily removed - to be reused
-    while (fillSensState == LOW) {
-      timeElapsed();
-      StartButtonFun ();
-      if (TotalFillTime + ((millis() - CurrentFillStart - (pauseTime - FillStartPauseTime))) >= 240000) {  // Check if total fill time exceeds 4 minutes
-        actHeaterOFF(); // Heater OFF
-        digitalWrite(washPump, LOW);   // Wash pump OFF
-        digitalWrite(inletValve, LOW); // Inlet valve OFF
-        faultCode = 50; // Fault code 50: Total filling time since last drain exceeds 4 minutes - water leakage.
-        actDrain();
-        errorFun();
+    digitalWrite(InletValve, HIGH);    // Inlet valve ON
+    WaitXmsecFunction(7000);                  // Wait 7 sec
+    digitalWrite(WashPump, HIGH);      // Wash pump ON
+    digitalWrite(InletValve, HIGH);    // Inlet valve ON
+    //WaterLevelSensorState = digitalRead(WaterLevelSensor); //temporarily removed - to be reused
+    while (WaterLevelSensorState == LOW) {
+      TimeElapsedFunction();
+      StartButtonFunction();
+      if (TotalFillDuration + ((millis() - CurrentFillStart - (PausedDuration - FillStartPausedDuration))) >= 240000) {  // Check if total fill time exceeds 4 minutes
+        HeaterOFFAction(); // Heater OFF
+        digitalWrite(WashPump, LOW);   // Wash pump OFF
+        digitalWrite(InletValve, LOW); // Inlet valve OFF
+        FaultCode = 50; // Fault code 50: Total filling time since last drain exceeds 4 minutes - water leakage.
+        DrainAction();
+        ErrorFunction();
       }
-      if ((periodElapsed - (pauseTime - FillStartPauseTime)) >= 180000) {  // Check if filling continuing for more than 3 minutes
-        actHeaterOFF(); // Heater OFF
-        digitalWrite(washPump, LOW);   // Wash pump OFF
-        digitalWrite(inletValve, LOW); // Inlet valve OFF
-        faultCode = 51; // Fault code 51: Water level sensor does not go HIGH after 3 minutes of filling - water leakage or inlet valve or sensor malfunction.
-        actDrain();
-        errorFun();
+      if ((CurrentPeriodDuration - (PausedDuration - FillStartPausedDuration)) >= 180000) {  // Check if filling continuing for more than 3 minutes
+        HeaterOFFAction(); // Heater OFF
+        digitalWrite(WashPump, LOW);   // Wash pump OFF
+        digitalWrite(InletValve, LOW); // Inlet valve OFF
+        FaultCode = 51; // Fault code 51: Water level sensor does not go HIGH after 3 minutes of filling - water leakage or inlet valve or sensor malfunction.
+        DrainAction();
+        ErrorFunction();
       }
-      digitalWrite(washPump, HIGH);    // Wash pump ON
-      digitalWrite(inletValve, HIGH);  // Inlet valve ON
-      // fillSensState = digitalRead(fillSens); // temporarily removed - to be reused
-      waitXmsec (5000); //temp - to be removed
-      fillSensState = HIGH; //temp - to be removed
-      StartButtonFun();
-      dispTemp ();
+      digitalWrite(WashPump, HIGH);    // Wash pump ON
+      digitalWrite(InletValve, HIGH);  // Inlet valve ON
+      // WaterLevelSensorState = digitalRead(WaterLevelSensor); // temporarily removed - to be reused
+      WaitXmsecFunction(5000); //temp - to be removed
+      WaterLevelSensorState = HIGH; //temp - to be removed
+      StartButtonFunction();
+      DisplayTemperatureFunction();
     }
-    digitalWrite(washPump, HIGH);      // Wash pump ON
-    digitalWrite(inletValve, HIGH);    // Inlet valve ON
-    waitXmsec (5000);                  // Wait 5 sec
-    digitalWrite(inletValve, LOW);     // Inlet valve OFF
-    TotalFillTime += ((millis() - CurrentFillStart - (pauseTime - FillStartPauseTime))); // Increase total fill timer with current fill duration
+    digitalWrite(WashPump, HIGH);      // Wash pump ON
+    digitalWrite(InletValve, HIGH);    // Inlet valve ON
+    WaitXmsecFunction(5000);                  // Wait 5 sec
+    digitalWrite(InletValve, LOW);     // Inlet valve OFF
+    TotalFillDuration += ((millis() - CurrentFillStart - (PausedDuration - FillStartPausedDuration))); // Increase total fill timer with current fill duration
     Serial.print(F("    Total fill time = "));  // temp - to be removed
-    Serial.println(TotalFillTime);  // temp - to be removed
+    Serial.println(TotalFillDuration);  // temp - to be removed
     CurrentFillStart = 0;
-    RawADC = 340; //temporary temperature - around 9.7 degrees C - to be removed
-    digitalWrite(washPump, WashPumpStatus);  // Restore wash pump state
+//    RawADC = 340; //temporary temperature - around 9.7 degrees C - to be removed
+    digitalWrite(WashPump, WashPumpStatus);  // Restore wash pump state
     if (HeaterStatus == HIGH) {
-      actHeaterON(); // Restore heater state
+      HeaterONAction(); // Restore Heater state
     }
     else {
-      actHeaterOFF();
+      HeaterOFFAction();
     }
     lcd.setCursor(0, 1);
     lcd.print(SubCycleName);
   }
-  dispTemp ();
-  StartButtonFun();
+  DisplayTemperatureFunction();
+  StartButtonFunction();
   // LastFillTime = millis();           // Reset fill timer
-  Serial.println("    actFill ended.");  //temp
+  Serial.println("    FillAction ended.");  //temp
 }
 
-void actCheckFillLevel() { // Check current water level
-  // fillSensState = digitalRead(fillSens); //temporarily removed - to be reused
-  // fillSensState = HIGH; //temp - to be removed
-  if (fillSensState == LOW) {  // Fill sensor LOW
+void CheckFillLevelAction() { // Check current water level
+  // WaterLevelSensorState = digitalRead(WaterLevelSensor); //temporarily removed - to be reused
+  // WaterLevelSensorState = HIGH; //temp - to be removed
+  if (WaterLevelSensorState == LOW) {  // Fill sensor LOW
     Serial.println(F("    Water level low during wash - refilling.")); //temp
-    actFill();     // Refill
+    FillAction();     // Refill
   }
-  timeElapsed();
-  dispTemp();
-  StartButtonFun();
+  TimeElapsedFunction();
+  DisplayTemperatureFunction();
+  StartButtonFunction();
 }
 
 
-void actHeaterON() { // Turn heater on
-  actCheckFillLevel();
-  StartButtonFun();
-  dispTemp ();
-  if (digitalRead (heater) == LOW) {
-    digitalWrite (heater, HIGH);
-    Serial.println(F("     actHeaterON executed.")); //temp
-  }
-}
-
-
-void actHeaterOFF() { // Turn heater off
-  StartButtonFun();
-  dispTemp ();
-  if (digitalRead(heater) == HIGH) {
-    digitalWrite(heater, LOW);
-    Serial.println(F("     actHeaterOFF executed.")); //temp
+void HeaterONAction() { // Turn Heater on
+  CheckFillLevelAction();
+  StartButtonFunction();
+  DisplayTemperatureFunction();
+  if (digitalRead (Heater) == LOW) {
+    digitalWrite (Heater, HIGH);
+    Serial.println(F("     HeaterONAction executed.")); //temp
   }
 }
 
 
-void actCheckForHeatAlarms(int TargetTemperature, unsigned long MaxDuration) {  // Check for heat alarms
-  StartButtonFun();
-  dispTemp ();
-  actCheckFillLevel();
-  if (waterTemp() >= OverheatLimit) { // Over heating
-    actHeaterOFF(); // Heater OFF
-    faultCode = 20; // Foult code 20: Over-heating. Heater does not turn off.
-    errorFun();
+void HeaterOFFAction() { // Turn Heater off
+  StartButtonFunction();
+  DisplayTemperatureFunction();
+  if (digitalRead(Heater) == HIGH) {
+    digitalWrite(Heater, LOW);
+    Serial.println(F("     HeaterOFFAction executed.")); //temp
   }
-  if (digitalRead(heater) == HIGH && digitalRead(washPump) == LOW) {  // Heater ON while pump OFF
-    actHeaterOFF(); // Heater OFF
-    faultCode = 30; // Foult code 30: Heater ON while wash pump OFF - wash pump does not turn on or heater does not turn off.
-    errorFun();
+}
+
+
+void CheckForHeatAlarmsAction(int TargetTemperature, unsigned long MaxDuration) {  // Check for heat alarms
+  StartButtonFunction();
+  DisplayTemperatureFunction();
+  CheckFillLevelAction();
+  if (WaterTemperatureFunction() >= OverheatLimit) { // Over heating
+    HeaterOFFAction(); // Heater OFF
+    FaultCode = 20; // Foult code 20: Over-heating. Heater does not turn off.
+    ErrorFunction();
+  }
+  if (digitalRead(Heater) == HIGH && digitalRead(WashPump) == LOW) {  // Heater ON while pump OFF
+    HeaterOFFAction(); // Heater OFF
+    FaultCode = 30; // Foult code 30: Heater ON while wash pump OFF - wash pump does not turn on or Heater does not turn off.
+    ErrorFunction();
   }
   if (MaxDuration > 0) {
-    if ((periodElapsed >= (MaxDuration)) && (waterTemp() < TargetTemperature)) {
-      actHeaterOFF(); // Heater OFF
-      faultCode = 21; // Water temperature not reached after MaxDuration (25 minutes) of heating. Heater or sensor malfunction.
-      actDrain();
-      errorFun();
+    if ((CurrentPeriodDuration >= (MaxDuration)) && (WaterTemperatureFunction() < TargetTemperature)) {
+      HeaterOFFAction(); // Heater OFF
+      FaultCode = 21; // Water temperature not reached after MaxDuration (25 minutes) of heating. Heater or sensor malfunction.
+      DrainAction();
+      ErrorFunction();
     }
   }
-  // Code for checking of other heater failure may be introduced here
-  StartButtonFun();
-  dispTemp ();
+  // Code for checking of other Heater failure may be introduced here
+  StartButtonFunction();
+  DisplayTemperatureFunction();
 }
 
-void actKeepTemp(unsigned int KeepTemperature, unsigned int KeepDuration, byte Detergent) { // Reach and maintain given temperature for given time, with or without detergent dispensing
-  Serial.print(F("    actKeepTemp started at ")); //temp
+void KeepTempAction(unsigned int KeepTemperature, unsigned int KeepDuration, byte Detergent) { // Reach and maintain given temperature for given time, with or without detergent dispensing
+  Serial.print(F("    KeepTempAction started at ")); //temp
   Serial.print(KeepTemperature); //temp
   Serial.print(F(" degrees, for ")); //temp
   Serial.print(KeepDuration); //temp
   Serial.print(F(" minutes, Detergent: " )); //temp
   Serial.println(Detergent); //temp
-  dispTemp();
-  TotalTimeElapsed();
-  actCheckFillLevel();
-  digitalWrite(washPump, HIGH); // Wash pump ON
-  periodStart = millis(); // Starting heating water to reach desired temperature
-  timeElapsed();
-  while ((periodElapsed < 1500000) && (waterTemp() < (KeepTemperature)) && digitalRead(washPump) == HIGH) { // Absolute maximum duration of heat rising is 25 minutes
-    actHeaterON(); // Heater ON
-    actCheckForHeatAlarms(KeepTemperature, 1500000); // check for heat alarms
-    actCheckFillLevel(); // check water fill level
-    dispTemp();
-    timeElapsed();
-    StartButtonFun();
+  DisplayTemperatureFunction();
+  TotalTimeElapsedFunction();
+  CheckFillLevelAction();
+  digitalWrite(WashPump, HIGH); // Wash pump ON
+  CurrentPeriodStart = millis(); // Starting heating water to reach desired temperature
+  TimeElapsedFunction();
+  while ((CurrentPeriodDuration < 1500000) && (WaterTemperatureFunction() < (KeepTemperature)) && digitalRead(WashPump) == HIGH) { // Absolute maximum duration of heat rising is 25 minutes
+    HeaterONAction(); // Heater ON
+    CheckForHeatAlarmsAction(KeepTemperature, 1500000); // check for heat alarms
+    CheckFillLevelAction(); // check water fill level
+    DisplayTemperatureFunction();
+    TimeElapsedFunction();
+    StartButtonFunction();
   }  // Temperature reached
-  actCheckForHeatAlarms(KeepTemperature, 1500000);  //check also for heater failure
+  CheckForHeatAlarmsAction(KeepTemperature, 1500000);  //check also for Heater failure
   Serial.println(F("    Requested temperature reached, starting temperature maintenance for requested time.")); //temp
-  actCheckFillLevel(); // check water fill level
+  CheckFillLevelAction(); // check water fill level
   if (Detergent == true) {  // After temperature is reached, dispense detergent if requested
-    digitalWrite(DetergentSolen, HIGH); // Dispense detergent if requested
-    Serial.println(F("    DetergentSolen put to ON.")); //temp
-    waitXmsec (3000);
-    digitalWrite(DetergentSolen, LOW);
-    Serial.println(F("    DetergentSolen put to OFF.")); //temp
+    digitalWrite(DetergentSolenoid, HIGH); // Dispense detergent if requested
+    Serial.println(F("    DetergentSolenoid put to ON.")); //temp
+    WaitXmsecFunction(3000);
+    digitalWrite(DetergentSolenoid, LOW);
+    Serial.println(F("    DetergentSolenoid put to OFF.")); //temp
   }
-  actCheckFillLevel(); // check water fill level
-  periodStart = millis(); // Starting temperature maintenance
-  timeElapsed();
-  while (periodElapsed < (KeepDuration * 60000)) {
-    actCheckForHeatAlarms(KeepTemperature, (KeepDuration + 5) * 60000); // check for heat alarms - parameters meant to not check for heater failure
-    if ((waterTemp() < (KeepTemperature - 2)) && digitalRead(washPump) == HIGH) {
-      actHeaterON(); // Heater ON
+  CheckFillLevelAction(); // check water fill level
+  CurrentPeriodStart = millis(); // Starting temperature maintenance
+  TimeElapsedFunction();
+  while (CurrentPeriodDuration < (KeepDuration * 60000)) {
+    CheckForHeatAlarmsAction(KeepTemperature, (KeepDuration + 5) * 60000); // check for heat alarms - parameters meant to not check for Heater failure
+    if ((WaterTemperatureFunction() < (KeepTemperature - 2)) && digitalRead(WashPump) == HIGH) {
+      HeaterONAction(); // Heater ON
     }
-    if (waterTemp() > (KeepTemperature + 2)) {
-      actHeaterOFF(); // Heater OFF
+    if (WaterTemperatureFunction() > (KeepTemperature + 2)) {
+      HeaterOFFAction(); // Heater OFF
     }
-    actCheckFillLevel(); // check water fill level
-    dispTemp();
-    timeElapsed();
-    StartButtonFun();
+    CheckFillLevelAction(); // check water fill level
+    DisplayTemperatureFunction();
+    TimeElapsedFunction();
+    StartButtonFunction();
     // Serial.print("Maintaining temperature - current: " ); //temp
-    // Serial.println(waterTemp()); //temp
+    // Serial.println(WaterTemperatureFunction()); //temp
   }
-  actHeaterOFF(); // Heater OFF
-  digitalWrite(washPump, LOW); // Wash pump OFF
-  actCheckFillLevel(); // check water fill level
-  dispTemp();
-  timeElapsed();
-  waitThreeSec();
-  Serial.println("    actKeepTemp ended."); //temp
+  HeaterOFFAction(); // Heater OFF
+  digitalWrite(WashPump, LOW); // Wash pump OFF
+  CheckFillLevelAction(); // check water fill level
+  DisplayTemperatureFunction();
+  TimeElapsedFunction();
+  Wait3secFunction();
+  Serial.println("    KeepTempAction ended."); //temp
 }
 
 
-void actWashCycle(unsigned int WashCycleTemperature, unsigned int WashCycleDuration, byte Detergent, byte RinseAid, String SubCycleName1) { // Basic wash cycle engine
-  Serial.print(F("   actWashCycle '"));
+//Washing sub-cycles
+
+
+void WashSubcycle(unsigned int WashCycleTemperature, unsigned int WashCycleDuration, byte Detergent, byte RinseAid, String SubCycleName1) { // Basic wash cycle engine
+  Serial.print(F("   WashSubcycle '"));
   Serial.print(SubCycleName1);
   Serial.print(F("' started at ")); //temp
   Serial.print(WashCycleTemperature); //temp
@@ -643,90 +644,89 @@ void actWashCycle(unsigned int WashCycleTemperature, unsigned int WashCycleDurat
   Serial.print(F(" , RinseAid: " )); //temp
   Serial.println(RinseAid); //temp
   SubCycleName = SubCycleName1;
-  dispTemp();
-  TotalTimeElapsed();
-  actFill();                    // Fill
+  DisplayTemperatureFunction();
+  TotalTimeElapsedFunction();
+  FillAction();                    // Fill
   lcd.setCursor(0, 1);
   lcd.print(SubCycleName);
-  waitThreeSec();
-  digitalWrite(washPump, HIGH); // Wash pump ON
-  timeElapsed();
-  actCheckFillLevel();
-  dispTemp();
-  StartButtonFun();
-  actKeepTemp(WashCycleTemperature, WashCycleDuration, Detergent); // Reach and maintain temperature for period
-  actHeaterOFF(); // Heater OFF
-  actCheckFillLevel();
-  waitThreeSec();
+  Wait3secFunction();
+  digitalWrite(WashPump, HIGH); // Wash pump ON
+  TimeElapsedFunction();
+  CheckFillLevelAction();
+  DisplayTemperatureFunction();
+  StartButtonFunction();
+  KeepTempAction(WashCycleTemperature, WashCycleDuration, Detergent); // Reach and maintain temperature for period
+  HeaterOFFAction(); // Heater OFF
+  CheckFillLevelAction();
+  Wait3secFunction();
   if (RinseAid == true) { // Perform rinse aid finish if requested
-    digitalWrite(washPump, HIGH);  // Wash pump ON
-    if ((waterTemp() < WashCycleTemperature) && digitalRead(washPump) == HIGH) {
-      actHeaterON();               // Heater ON if applicable
+    digitalWrite(WashPump, HIGH);  // Wash pump ON
+    if ((WaterTemperatureFunction() < WashCycleTemperature) && digitalRead(WashPump) == HIGH) {
+      HeaterONAction();               // Heater ON if applicable
     }
-    digitalWrite(RinseAidSolen, HIGH); // Rinse Aid solenoid ON
-    waitXmsec (60000);             // Wait 1 minute
-    digitalWrite(RinseAidSolen, LOW);  // Rinse Aid solenoid OFF
-    waitXmsec (3000);              // Wait 3 seconds
-    digitalWrite(RinseAidSolen, HIGH); // Rinse Aid solenoid ON
-    waitXmsec (60000);             // Wait 1 minute
-    digitalWrite(RinseAidSolen, LOW);  // Rinse Aid solenoid OFF
-    actKeepTemp(WashCycleTemperature, 1, 0);  // Wash at desired temperature for 1 minute
-    digitalWrite(washPump, HIGH);  // Wash pump ON
-    actHeaterOFF();                // Heater OFF
-    waitXmsec (60000);             // Wait 1 minute
+    digitalWrite(RinseAidSolenoid, HIGH); // Rinse Aid solenoid ON
+    WaitXmsecFunction(60000);             // Wait 1 minute
+    digitalWrite(RinseAidSolenoid, LOW);  // Rinse Aid solenoid OFF
+    WaitXmsecFunction(3000);              // Wait 3 seconds
+    digitalWrite(RinseAidSolenoid, HIGH); // Rinse Aid solenoid ON
+    WaitXmsecFunction(60000);             // Wait 1 minute
+    digitalWrite(RinseAidSolenoid, LOW);  // Rinse Aid solenoid OFF
+    KeepTempAction(WashCycleTemperature, 1, 0);  // Wash at desired temperature for 1 minute
+    digitalWrite(WashPump, HIGH);  // Wash pump ON
+    HeaterOFFAction();                // Heater OFF
+    WaitXmsecFunction(60000);             // Wait 1 minute
   }
-  digitalWrite(washPump, LOW); // Wash pump OFF
-  waitThreeSec();
-  actDrain();  // Drain
-  timeElapsed();
-  dispTemp();
-  StartButtonFun();
-  Serial.println(F("   actWashCycle ended.")); //temp
+  digitalWrite(WashPump, LOW); // Wash pump OFF
+  Wait3secFunction();
+  DrainAction();  // Drain
+  TimeElapsedFunction();
+  DisplayTemperatureFunction();
+  StartButtonFunction();
+  Serial.println(F("   WashSubcycle ended.")); //temp
 }
 
 
-void actDry(byte DryDur) { // Dry sub-cycle
-  Serial.println(F("   actDry started.")); //temp
-  TotalTimeElapsed();
+void DrySubcycle(byte DryDur) { // Dry sub-cycle
+  Serial.println(F("   DrySubcycle started.")); //temp
+  TotalTimeElapsedFunction();
   lcd.setCursor(0, 1);
   SubCycleName = "Drying... ";
   lcd.setCursor(0, 1);
   lcd.print(SubCycleName);
-  waitXmsec (120000);              // Wait 2 minutes
-  //digitalWrite(regenSolen, HIGH);  // Regeneration solenoid ON
-  actDrain();                      // Drain
+  WaitXmsecFunction(120000);              // Wait 2 minutes
+  //digitalWrite(RegenerationSolenoid, HIGH); // Regeneration solenoid ON
+  DrainAction();                   // Drain
   lcd.setCursor(0, 1);
   lcd.print(SubCycleName);
-  waitXmsec (60000);               // Wait 1 minute
-  digitalWrite(inletValve, HIGH);  // Inlet valve ON
-  waitXmsec (1000);                // Wait 1 second
-  digitalWrite(inletValve, LOW);   // Inlet valve OFF
-  waitXmsec (3000);                // Wait 3 seconds
-  digitalWrite(inletValve, HIGH);  // Inlet valve ON
-  waitXmsec (1000);                // Wait 1 second
-  digitalWrite(inletValve, LOW);   // Inlet valve OFF
-  //digitalWrite(regenSolen, LOW);   // Regeneration solenoid OFF
-  actDrain();                      // Drain
+  WaitXmsecFunction(60000);               // Wait 1 minute
+  digitalWrite(InletValve, HIGH);  // Inlet valve ON
+  WaitXmsecFunction(1000);                // Wait 1 second
+  digitalWrite(InletValve, LOW);   // Inlet valve OFF
+  WaitXmsecFunction(3000);                // Wait 3 seconds
+  digitalWrite(InletValve, HIGH);  // Inlet valve ON
+  WaitXmsecFunction(1000);                // Wait 1 second
+  digitalWrite(InletValve, LOW);   // Inlet valve OFF
+  //digitalWrite(RegenerationSolenoid, LOW); // Regeneration solenoid OFF
+  DrainAction();                   // Drain
   lcd.setCursor(0, 1);
   lcd.print(SubCycleName);
-  waitXmsec (DryDur * 60000);      // Wait arbitrary time according to parameter
-  actDrain();                      // Drain
-  Serial.println(F("   actDry ended.")); //temp
+  WaitXmsecFunction(DryDur * 60000);      // Wait arbitrary time according to parameter
+  DrainAction();                   // Drain
+  Serial.println(F("   DrySubcycle ended.")); //temp
 }
 
 
+//Washing cycles
 
-//Washing sub-cycles
 
-
-void wMatrixCycle(String ProgramName, byte PreWashDuration, byte WashDuration,  byte Rinse1Duration, byte Rinse2Duration, byte ClearRinseDuration, byte DryDuration, byte ExpDuration, byte tempLimit ) { // Main cycle engine
-  Serial.println(F("  wMatrixCycle started.")); //temp
+void MatrixCycle(String ProgramName, byte PreWashDuration, byte WashDuration,  byte Rinse1Duration, byte Rinse2Duration, byte ClearRinseDuration, byte DryDuration, byte ExpectedDuration, byte TemperatureLimit ) { // Matrix cycle engine
+  Serial.println(F("  MatrixCycle started.")); //temp
   Serial.print(F("  Program: '")); //temp
   Serial.print(ProgramName); //temp
   Serial.print(F("', temperature: ")); //temp
-  Serial.print(tempLimit); //temp
+  Serial.print(TemperatureLimit); //temp
   Serial.print(F(" degrees C, exp. duration: ")); //temp
-  Serial.print(ExpDuration); //temp
+  Serial.print(ExpectedDuration); //temp
   Serial.print(F(", Prewash dur.: " )); //temp
   Serial.print(PreWashDuration); //temp
   Serial.print(F(", Wash dur.: " )); //temp
@@ -742,48 +742,48 @@ void wMatrixCycle(String ProgramName, byte PreWashDuration, byte WashDuration,  
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print(ProgramName);
-  timeElapsed();
-  actDrain();  // Initial drain
-  waitThreeSec();
-  dispTemp();
-  timeElapsed();
+  TimeElapsedFunction();
+  DrainAction();  // Initial drain
+  Wait3secFunction();
+  DisplayTemperatureFunction();
+  TimeElapsedFunction();
   if (PreWashDuration > 0) {
-    actWashCycle(min(36, tempLimit), PreWashDuration, 0, 0, "Prewash...    ");  // Prewash without detergent
+    WashSubcycle(min(36, TemperatureLimit), PreWashDuration, 0, 0, "Prewash...    ");  // Prewash without detergent
   };
-  waitThreeSec();
-  dispTemp();
-  timeElapsed();
-  waitThreeSec();
+  Wait3secFunction();
+  DisplayTemperatureFunction();
+  TimeElapsedFunction();
+  Wait3secFunction();
   if (WashDuration > 0) {
-    actWashCycle(tempLimit, WashDuration, 1, 0, "Washing...    ");  // Wash with detergent
+    WashSubcycle(TemperatureLimit, WashDuration, 1, 0, "Washing...    ");  // Wash with detergent
   };
-  waitThreeSec();
+  Wait3secFunction();
   if (Rinse1Duration > 0) {
-    actWashCycle(min(15, tempLimit), Rinse1Duration, 0, 0, "Rinsing...    ");  // Rinse 1
+    WashSubcycle(min(15, TemperatureLimit), Rinse1Duration, 0, 0, "Rinsing...    ");  // Rinse 1
   };
-  waitThreeSec();
-  timeElapsed();
+  Wait3secFunction();
+  TimeElapsedFunction();
   if (Rinse2Duration > 0) {
-    actWashCycle(min(15, tempLimit), Rinse2Duration, 0, 0, "Rinsing...    ");  // Rinse 2
+    WashSubcycle(min(15, TemperatureLimit), Rinse2Duration, 0, 0, "Rinsing...    ");  // Rinse 2
   };
-  waitThreeSec();
-  timeElapsed();
+  Wait3secFunction();
+  TimeElapsedFunction();
   if (ClearRinseDuration > 0) {
-    actWashCycle(min(48, tempLimit), ClearRinseDuration, 0, 1, "Clear Rinse...    ");  // Clear Rinse with Rinse Aid
+    WashSubcycle(min(48, TemperatureLimit), ClearRinseDuration, 0, 1, "Clear Rinse...    ");  // Clear Rinse with Rinse Aid
   };
-  waitThreeSec();
+  Wait3secFunction();
   if (DryDuration > 0) {
-    actDry(DryDuration);  // Dry
+    DrySubcycle(DryDuration);  // Dry
   }
-  Serial.println(F("  wMatrixCycle ended.")); //temp
+  Serial.println(F("  MatrixCycle ended.")); //temp
 }
 
 
-//Washing programs
+//Washing programmes
 
 
-void wMatrixProgram(byte ProgramIndex) {  // Matrix program engine
-  Serial.println(F(" wMatrixProgram started.")); //temp
+void MatrixProgramme(byte ProgramIndex) {  // Matrix programme engine
+  Serial.println(F(" MatrixProgramme started.")); //temp
   ProgramName = ProgramNames[ProgramIndex]; // Program name
   byte PreWashDuration = PreWashDurations[ProgramIndex]; // Pre-wash duration
   byte WashDuration = WashDurations[ProgramIndex]; // Wash duration
@@ -791,58 +791,58 @@ void wMatrixProgram(byte ProgramIndex) {  // Matrix program engine
   byte Rinse2Duration = Rinse2Durations[ProgramIndex]; // Rinse 2 duration
   byte ClearRinseDuration = ClearRinseDurations[ProgramIndex]; // Clear Rinse duration
   byte DryDuration = DryDurations[ProgramIndex]; // Drying duration
-  ExpDuration = ExpectedDurations[ProgramIndex]; // Expected duration
-  tempLimit = HighestTemperatures[ProgramIndex]; // Max temperature
+  ExpectedDuration = ExpectedDurations[ProgramIndex]; // Expected duration
+  TemperatureLimit = HighestTemperatures[ProgramIndex]; // Max temperature
   if ( MatrixStructure[ProgramIndex] == 0) { // Program is not matrix - exiting procedure
     return;
   }
-  wMatrixCycle (ProgramName, PreWashDuration, WashDuration, Rinse1Duration, Rinse2Duration, ClearRinseDuration, DryDuration, ExpDuration, tempLimit);
-  Finish();
-  Serial.println(F(" wMatrixProgram ended.")); //temp
+  MatrixCycle (ProgramName, PreWashDuration, WashDuration, Rinse1Duration, Rinse2Duration, ClearRinseDuration, DryDuration, ExpectedDuration, TemperatureLimit);
+  FinishProgrammeFunction();
+  Serial.println(F(" MatrixProgramme ended.")); //temp
 }
 
 
-void wEconom() {  // Eco programme
-  Serial.println(F(" wEconom started.")); //temp
-  ExpDuration = ExpectedDurations[3]; //Expected duration for Eco Wash
-  tempLimit = HighestTemperatures[3]; // Max temperature for Eco Wash
+void EconomyProgramme() {  // Eco programme
+  Serial.println(F(" EconomyProgramme started.")); //temp
+  ExpectedDuration = ExpectedDurations[3]; //Expected duration for Eco Wash
+  TemperatureLimit = HighestTemperatures[3]; // Max temperature for Eco Wash
   ProgramName = ProgramNames[3];
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print(ProgramName); // name of Eco Wash program
   SubCycleName = "Washing... ";
   lcd.print(SubCycleName);
-  actDrain(); // Initial drain
-  waitThreeSec();
-  actWashCycle(36, 8, 0, 0, "Prewash...    ");  // Prewash without detergent
-  waitThreeSec();
-  actFill();  // Fill
-  waitThreeSec();
-  actCheckFillLevel();
-  actKeepTemp(41, 10, 1);  // Wash at 41 degrees for 10 minutes with detergent
-  actKeepTemp(tempLimit, 1, 0); // Conitinue to wash at temperature tempLimit for 1 minute without detergent
-  waitThreeSec();
-  actDrain();  // Drain
-  waitThreeSec();
-  timeElapsed();
-  actWashCycle(15, 6, 0, 0, "Rinsing...     ");  // Request wash cycle without detergent
-  timeElapsed();
-  StartButtonFun();
-  waitThreeSec();
-  dispTemp();
-  actWashCycle (48, 1, 0, 1, "Clear rinse...    ");  // Wash at 48 degrees Celsius for 1 minute and finish with Rinse Aid
-  waitThreeSec();
-  timeElapsed();
-  actDry(11); //  Dry
-  Finish();
-  Serial.println(F(" wEconom ended.")); //temp
+  DrainAction(); // Initial drain
+  Wait3secFunction();
+  WashSubcycle(36, 8, 0, 0, "Prewash...    ");  // Prewash without detergent
+  Wait3secFunction();
+  FillAction();  // Fill
+  Wait3secFunction();
+  CheckFillLevelAction();
+  KeepTempAction(41, 10, 1);  // Wash at 41 degrees for 10 minutes with detergent
+  KeepTempAction(TemperatureLimit, 1, 0); // Conitinue to wash at temperature TemperatureLimit for 1 minute without detergent
+  Wait3secFunction();
+  DrainAction();  // Drain
+  Wait3secFunction();
+  TimeElapsedFunction();
+  WashSubcycle(15, 6, 0, 0, "Rinsing...     ");  // Request wash cycle without detergent
+  TimeElapsedFunction();
+  StartButtonFunction();
+  Wait3secFunction();
+  DisplayTemperatureFunction();
+  WashSubcycle (48, 1, 0, 1, "Clear rinse...    ");  // Wash at 48 degrees Celsius for 1 minute and finish with Rinse Aid
+  Wait3secFunction();
+  TimeElapsedFunction();
+  DrySubcycle(11); //  Dry
+  FinishProgrammeFunction();
+  Serial.println(F(" EconomyProgramme ended.")); //temp
 }
 
 
-void wCustom() {  // Custom programme - allows user selection of custom temperature and wash time, and constructs a washing cycle to fulfill the custom parameters
-  Serial.println(F(" wCustom started.")); //temp
-  ExpDuration = ExpectedDurations[8]; //Expected duration for Custom Wash
-  tempLimit = HighestTemperatures[8]; // Max temperature for Custom Wash
+void CustomProgramme() {  // Custom programme - allows user selection of custom temperature and wash time, and constructs a washing cycle to fulfill the custom parameters
+  Serial.println(F(" CustomProgramme started.")); //temp
+  ExpectedDuration = ExpectedDurations[8]; //Expected duration for Custom Wash
+  TemperatureLimit = HighestTemperatures[8]; // Max temperature for Custom Wash
   ProgramName = ProgramNames[8];
   byte PreWashDuration = PreWashDurations[8];
   byte WashDuration = WashDurations[8];
@@ -855,14 +855,14 @@ void wCustom() {  // Custom programme - allows user selection of custom temperat
   lcd.print(ProgramName); // name of program
   lcd.setCursor(0, 1);
   lcd.print(F("Temperature:      "));
-  onButtonCount = 0; // initialize selector to select maximum temperature
-  while (StartButtonFun() != 1) {
-    selKeyIN = keySelect(1,13); // read custom temperature
-    CustomTemp = selKeyIN * 5;
-    if (CustomTemp < 5) CustomTemp = 5;
-    if (CustomTemp > tempLimit) CustomTemp = tempLimit;
+  StartButtonCode = 0; // initialize selector to select maximum temperature
+  while (StartButtonFunction() != 1) {
+    SelectorDialValue = EncoderSelectFunction(1,13); // read custom temperature
+    CustomTemperature = SelectorDialValue * 5;
+    if (CustomTemperature < 5) CustomTemperature = 5;
+    if (CustomTemperature > TemperatureLimit) CustomTemperature = TemperatureLimit;
     lcd.setCursor(12, 1);
-    lcd.print(CustomTemp);
+    lcd.print(CustomTemperature);
     lcd.print((char)223);
     lcd.print("C   ");
   }
@@ -870,16 +870,16 @@ void wCustom() {  // Custom programme - allows user selection of custom temperat
   lcd.print(F("Duration:          "));
   lcd.setCursor(10, 0);
   lcd.print("______  ");
-  onButtonCount = 0; // initialize selector to select maximum duration
-  while (StartButtonFun() != 1) {
-    selKeyIN = keySelect(1, 24);  // read custom duration
-    CustomDuration = selKeyIN * 5;
+  StartButtonCode = 0; // initialize selector to select maximum duration
+  while (StartButtonFunction() != 1) {
+    SelectorDialValue = EncoderSelectFunction(1, 24);  // read custom duration
+    CustomDuration = SelectorDialValue * 5;
     if (CustomDuration < 10) CustomDuration = 10;
-    if (CustomDuration > ExpDuration) CustomDuration = ExpDuration;
+    if (CustomDuration > ExpectedDuration) CustomDuration = ExpectedDuration;
     lcd.setCursor(12, 1);
     lcd.print(CustomDuration);
     lcd.print("'   ");
-    CustomCoefficient = (CustomDuration * 1.0) / (ExpDuration * 1.0);
+    CustomCoefficient = (CustomDuration * 1.0) / (ExpectedDuration * 1.0);
     lcd.setCursor(10, 0);
     PreWashDuration = (PreWashDurations[8] * CustomCoefficient / 8.0); // Pre-Wash duration, divider 7.0 makes it less important
     PreWashDuration = PreWashDuration * 8;
@@ -907,21 +907,21 @@ void wCustom() {  // Custom programme - allows user selection of custom temperat
     else lcd.print("_");
     lcd.print("      ");
   }
-  tone (buzzer, 700, 300); // Buzz for 300 milliseconds with frequency 700 Hz - selected custom programme starting
-  ExpDuration = CustomDuration;
+  tone (Buzzer, 700, 300); // Buzz for 300 milliseconds with frequency 700 Hz - selected custom programme starting
+  ExpectedDuration = CustomDuration;
   TotalPeriodStart = millis();
-  timeStopped = 0;
-  pauseTime = 0;
-  pause = false;
+  StopTime = 0;
+  PausedDuration = 0;
+  PausedState = false;
   Serial.print(F(" Selected custom temperature: "));
-  Serial.print(CustomTemp);
+  Serial.print(CustomTemperature);
   Serial.print(" degrees C, custom duration: ");
   Serial.print(CustomDuration);
   Serial.println(" minutes.");
   String ProgramName = "Custom            ";
-  wMatrixCycle (ProgramName, PreWashDuration, WashDuration, Rinse1Duration, Rinse2Duration, ClearRinseDuration, DryDuration, CustomDuration, CustomTemp);
-  Finish();
-  Serial.println(F(" wCustom ended.")); //temp
+  MatrixCycle (ProgramName, PreWashDuration, WashDuration, Rinse1Duration, Rinse2Duration, ClearRinseDuration, DryDuration, CustomDuration, CustomTemperature);
+  FinishProgrammeFunction();
+  Serial.println(F(" CustomProgramme ended.")); //temp
 }
 
 void setup() {
@@ -930,31 +930,31 @@ void setup() {
   lcd.home (); // go home
   Serial.begin(9600); // opens serial port, sets data rate to 9600 bps
   Serial.println(F("setup started.")); //temp
-  pinMode(heater, OUTPUT);
-  pinMode(washPump, OUTPUT);
-  pinMode(DetergentSolen, OUTPUT);
-  pinMode(regenSolen, OUTPUT);
-  pinMode(RinseAidSolen, OUTPUT);
-  pinMode(drainPump, OUTPUT);
-  pinMode(inletValve, OUTPUT);
-  pinMode(buzzer, OUTPUT);
+  pinMode(Heater, OUTPUT);
+  pinMode(WashPump, OUTPUT);
+  pinMode(DetergentSolenoid, OUTPUT);
+  pinMode(RegenerationSolenoid, OUTPUT);
+  pinMode(RinseAidSolenoid, OUTPUT);
+  pinMode(DrainPump, OUTPUT);
+  pinMode(InletValve, OUTPUT);
+  pinMode(Buzzer, OUTPUT);
   pinMode(RotaryEncoderPinA, INPUT); // Rotary Encoder DT
   pinMode(RotaryEncoderPinB, INPUT); // Rotary Encoder CLK
-  pinMode(startBtn, INPUT_PULLUP);
-  pinMode(doorBtn, INPUT_PULLUP);
-  // pinMode(errorSens, INPUT);
-  pinMode(fillSens, INPUT);
-  digitalWrite(inletValve, LOW);
-  digitalWrite(heater, LOW);
-  digitalWrite(washPump, LOW);
-  digitalWrite(drainPump, LOW);
-  digitalWrite(DetergentSolen, LOW);
-  digitalWrite(RinseAidSolen, LOW);
-  digitalWrite(regenSolen, LOW);
-  digitalWrite(fillSens, LOW);
-  digitalWrite(buzzer, LOW);
-  // attachInterrupt(digitalPinToInterrupt(doorBtn), actDoorBtn, FALLING); // Not used at this time - door switch is currently checked via polling together with the On/Off button
-  // attachInterrupt(digitalPinToInterrupt(3), actErrorSens, FALLING); // For future use
+  pinMode(StartButton, INPUT_PULLUP);
+  pinMode(DoorSwitch, INPUT_PULLUP);
+  // pinMode(ErrorSensor, INPUT);
+  pinMode(WaterLevelSensor, INPUT);
+  digitalWrite(InletValve, LOW);
+  digitalWrite(Heater, LOW);
+  digitalWrite(WashPump, LOW);
+  digitalWrite(DrainPump, LOW);
+  digitalWrite(DetergentSolenoid, LOW);
+  digitalWrite(RinseAidSolenoid, LOW);
+  digitalWrite(RegenerationSolenoid, LOW);
+  digitalWrite(WaterLevelSensor, LOW);
+  digitalWrite(Buzzer, LOW);
+  // attachInterrupt(digitalPinToInterrupt(DoorSwitch), actDoorSwitch, FALLING); // Not used at this time - door switch is currently checked via polling together with the On/Off button
+  // attachInterrupt(digitalPinToInterrupt(3), ErrorSensororFunction, FALLING); // For future use
   Serial.println("setup ended."); //temp
 }
 
@@ -966,7 +966,7 @@ void loop() {
   lcd.print(F("Welcome! Arduino "));
   lcd.setCursor(0, 1);
   lcd.print(F("Dishwasher "));
-  lcd.print(ProgramVersion);
+  lcd.print(SoftwareVersion);
   delay(4000);
   lcd.clear();
   Serial.println(F("Starting program selector.")); //temp
@@ -974,50 +974,50 @@ void loop() {
   lcd.print(F("Select a program"));
   lcd.setCursor(0, 1);
   lcd.print(F("and press Start"));
-  while (StartButtonFun() != 1) {
-    lcdKeyMenu = keySelect(0, NumberOfPrograms - 1); //read the value from the rotary encoder
+  while (StartButtonFunction() != 1) {
+    MenuSelectorValue = EncoderSelectFunction(0, NumberOfPrograms - 1); //read the value from the rotary encoder
     lcd.setCursor(0, 1);
     lcd.print(">");
-    lcd.print(ProgramNames[lcdKeyMenu]);
+    lcd.print(ProgramNames[MenuSelectorValue]);
     lcd.print(F("                  "));
   }
   TotalPeriodStart = millis();
-  timeStopped = 0;
-  pauseTime = 0;
-  pause = false;
-  StartButtonFun();
+  StopTime = 0;
+  PausedDuration = 0;
+  PausedState = false;
+  StartButtonFunction();
   Serial.print(F("Programme '"));
-  Serial.print(ProgramNames[lcdKeyMenu]);
+  Serial.print(ProgramNames[MenuSelectorValue]);
   Serial.println(F("' selected.")); //temp
   delay(300);
-  tone (buzzer, 700, 300); // Buzz for 300 milliseconds with frequency 700 Hz - selected programme starting
-  switch (lcdKeyMenu) {
+  tone (Buzzer, 700, 300); // Buzz for 300 milliseconds with frequency 700 Hz - selected programme starting
+  switch (MenuSelectorValue) {
     case 0:
-      resetFun(); // Drain and restart machine
+      ResetFunctiontion(); // Drain and restart machine
       break;
     case 1:
-      wMatrixProgram(lcdKeyMenu);
+      MatrixProgramme(MenuSelectorValue);
       break;
     case 2:
-      wMatrixProgram(lcdKeyMenu);
+      MatrixProgramme(MenuSelectorValue);
       break;
     case 3:
-      wEconom(); // Eco program - not matrix
+      EconomyProgramme(); // Eco program - not matrix
       break;
     case 4:
-      wMatrixProgram(lcdKeyMenu);
+      MatrixProgramme(MenuSelectorValue);
       break;
     case 5:
-      wMatrixProgram(lcdKeyMenu);
+      MatrixProgramme(MenuSelectorValue);
       break;
     case 6:
-      wMatrixProgram(lcdKeyMenu);
+      MatrixProgramme(MenuSelectorValue);
       break;
     case 7:
-      wMatrixProgram(lcdKeyMenu);
+      MatrixProgramme(MenuSelectorValue);
       break;
     case 8:
-      wCustom(); // Custom program - not matrix
+      CustomProgramme(); // Custom program - not matrix
       break;
   }
   Serial.println(F("loop ended.")); //temp
