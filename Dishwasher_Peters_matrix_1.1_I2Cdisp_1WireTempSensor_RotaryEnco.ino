@@ -44,7 +44,6 @@ const int NumberOfPrograms = 9;
 const String ProgramNames[] = {"Restart", "Intensive Wash", "Normal Wash", "Eco Wash", "Fast Wash", "Express Strong", "Cold Wash", "Rinse Only", "Custom"}; // Names of programs
 const byte HighestTemperatures[] = {0, 65, 60, 48, 36, 60, 5, 20, 65}; // Highest allowed temperatures for programs in degrees Celsius
 const byte ExpectedDurations[] =  {0, 120, 100, 80, 40, 50, 55, 20, 120}; // Expected durations of programs in minutes
-// const int KeySelectAnalogValues[] =  {0, 150, 300, 450, 600, 750, 850, 950, 1050}; // Analog boundaries of the programs for the selector analog input
 const byte MatrixStructure[] =  {0, 1, 1, 0, 1, 1, 1, 1, 0}; // 1 = matrix structure; 0 = custom program
 const byte PreWashDurations[] =  {0, 12, 2, 8, 0, 0, 0, 0, 20}; // Pre-wash durations per programs in minutes; 0 = no Pre-wash
 const byte WashDurations[] =  {0, 25, 25, 11, 10, 20, 25, 0, 50}; // Wash durations per programs in minutes; 0 = no Wash
@@ -73,8 +72,6 @@ unsigned long TotalPeriodStart, TotalPeriodElapsed;
 unsigned long periodStart, periodElapsed;
 unsigned long TotalFillTime = 0, CurrentFillStart = 0;
 int ExpDuration = 0; //Expected program duration in minutes
-double tempArray[25];
-byte arrayIndex = 0;
 int lcdKeyMenu = 0;
 int selKeyIN = 0;
 unsigned long CustomTemp = 0;
@@ -86,18 +83,14 @@ int x = 0;
 int RawADC = 240; //temporary temperature around 0 degrees Celsius - to be removed
 String ProgramName = "                ";
 String SubCycleName = "                ";
-// String CustomSequence = "PWRRCD";
 //-----On/pause/restart/reset Button reference ------
 int RotaryEncoderPos = 0;
 int RotaryEncoderPinALast = LOW;
-int RotaryEncoderPinAState = LOW;
 int startBtnState = HIGH;
 int O_buttonState = HIGH;
 int O_lastButtonState = HIGH;
 unsigned long lastDebounceTime = 0;
-int onButtonCount = 0;                //switch case statement to control what each button push does
-
-
+int onButtonCount = 0;  //switch case statement to control what each button push does
 
 
 //General actions
@@ -133,34 +126,6 @@ double waterTemp() { // Measure water temperature
   double Temp;
   sensors.requestTemperatures();
   Temp = sensors.getTempCByIndex(0);
-  /*
-    if (arrayIndex > 23) { //which in its turn was taken from Arduino Playground
-     arrayIndex = 0;
-    }
-    else {
-     arrayIndex++;
-    }
-    double Temp; // The Thermistor2 "Simple Code"
-    //int RawADC = analogRead(tempSensor);
-    if (digitalRead(heater) == HIGH) { // temp
-     RawADC++; // temp
-    } // temp
-    else { // temp
-     if (RawADC > 350) {
-       RawADC--; //  temp
-     }
-    } // temp
-    delay(50); // temp
-    Temp = log(((10240000 / RawADC) - 10000));
-    Temp = 1 / (0.001129148 + (0.000234125 + (0.0000000876741 * Temp * Temp )) * Temp );
-    Temp = Temp - 273.15; //convert kelvin to celsius
-    tempArray[arrayIndex] = Temp;
-    Temp = 0;
-    for (int i = 0; i < 24; i++) {
-     Temp += tempArray[i];
-    }
-    return (Temp / 25); // return the average temperature of the array
-  */
   return Temp;
 }
 
@@ -173,12 +138,8 @@ void dispTemp() { // Display current temperature on screen
 }
 
 
-// Program flow actions
-
-
-
-unsigned int keySelect() { // Read rotary encoder
-  RotaryEncoderPinAState = digitalRead(RotaryEncoderPinA);
+unsigned int keySelect(int StartPosition, int EndPosition) { // Read rotary encoder
+  int RotaryEncoderPinAState = digitalRead(RotaryEncoderPinA);
   if ((RotaryEncoderPinALast == LOW) && (RotaryEncoderPinAState == HIGH)) {
     if (digitalRead(RotaryEncoderPinB) == LOW) {
       RotaryEncoderPos--;
@@ -188,40 +149,10 @@ unsigned int keySelect() { // Read rotary encoder
     tone (buzzer, 600, 7); // Buzz for 7 milliseconds with frequency 600 Hz
   }
   RotaryEncoderPinALast = RotaryEncoderPinAState;
-  if (RotaryEncoderPos > 30) RotaryEncoderPos = 30;
-  if (RotaryEncoderPos < 0) RotaryEncoderPos = 0;
+  if (RotaryEncoderPos < StartPosition) RotaryEncoderPos = StartPosition;
+  if (RotaryEncoderPos > EndPosition) RotaryEncoderPos = EndPosition;
   return RotaryEncoderPos;
 }
-
-
-int readKey() { // Read programs selector key
-  selKeyIN = keySelect(); //read the value from the rotary encoder
-  if ((selKeyIN > 0) && (selKeyIN < NumberOfPrograms - 1)) return selKeyIN;
-  if (selKeyIN >= NumberOfPrograms - 1) return NumberOfPrograms - 1;
-  return 0;
-}
-
-
-void selMenu() { // Select a program
-  Serial.println(F("selMenu started.")); //temp
-  lcd.setCursor(0, 0);
-  lcd.print(F("Select a program"));
-  lcd.setCursor(0, 1);
-  lcd.print(F("and press Start"));
-  while (StartButtonFun() != 1) {
-    lcdKeyMenu = readKey(); // read key
-    lcd.setCursor(0, 1);
-    lcd.print(">");
-    lcd.print(ProgramNames[lcdKeyMenu]);
-    lcd.print(F("                  "));
-  }
-  TotalPeriodStart = millis();
-  timeStopped = 0;
-  pauseTime = 0;
-  pause = false;
-  Serial.println(F("selMenu ended.")); //temp
-}
-
 
 
 int StartButtonFun() { // On/Pause/Resume/Reset Button
@@ -267,6 +198,10 @@ int StartButtonFun() { // On/Pause/Resume/Reset Button
   while (onButtonCount == 2);
   return onButtonCount;
 }
+
+
+
+// Program flow actions
 
 
 
@@ -923,9 +858,7 @@ void wCustom() {  // Custom programme - allows user selection of custom temperat
   lcd.print(F("Temperature:      "));
   onButtonCount = 0; // initialize selector to select maximum temperature
   while (StartButtonFun() != 1) {
-    selKeyIN = keySelect(); // read custom temperature
-    if (selKeyIN < 1) selKeyIN = 1;
-    if (selKeyIN > 13) selKeyIN = 13;
+    selKeyIN = keySelect(1,13); // read custom temperature
     CustomTemp = selKeyIN * 5;
     if (CustomTemp < 5) CustomTemp = 5;
     if (CustomTemp > tempLimit) CustomTemp = tempLimit;
@@ -940,9 +873,7 @@ void wCustom() {  // Custom programme - allows user selection of custom temperat
   lcd.print("______  ");
   onButtonCount = 0; // initialize selector to select maximum duration
   while (StartButtonFun() != 1) {
-    selKeyIN = keySelect();  // read custom duration
-    if (selKeyIN < 1) selKeyIN = 1;
-    if (selKeyIN > 24) selKeyIN = 24;
+    selKeyIN = keySelect(1, 24);  // read custom duration
     CustomDuration = selKeyIN * 5;
     if (CustomDuration < 10) CustomDuration = 10;
     if (CustomDuration > ExpDuration) CustomDuration = ExpDuration;
@@ -1000,7 +931,6 @@ void setup() {
   lcd.home (); // go home
   Serial.begin(9600); // opens serial port, sets data rate to 9600 bps
   Serial.println(F("setup started.")); //temp
-  for (int i = 0; i < 25; i++) tempArray[i] = 21; //first read temperature
   pinMode(heater, OUTPUT);
   pinMode(washPump, OUTPUT);
   pinMode(DetergentSolen, OUTPUT);
@@ -1014,9 +944,7 @@ void setup() {
   pinMode(startBtn, INPUT_PULLUP);
   pinMode(doorBtn, INPUT_PULLUP);
   // pinMode(errorSens, INPUT);
-  // pinMode(keySelect, INPUT);
   pinMode(fillSens, INPUT);
-  // pinMode(tempSensor, INPUT);
   digitalWrite(inletValve, LOW);
   digitalWrite(heater, LOW);
   digitalWrite(washPump, LOW);
@@ -1043,8 +971,21 @@ void loop() {
   delay(4000);
   lcd.clear();
   Serial.println(F("Starting program selector.")); //temp
-  selMenu();
-  lcdKeyMenu = readKey(); // read key
+  lcd.setCursor(0, 0);
+  lcd.print(F("Select a program"));
+  lcd.setCursor(0, 1);
+  lcd.print(F("and press Start"));
+  while (StartButtonFun() != 1) {
+    lcdKeyMenu = keySelect(0, NumberOfPrograms - 1); //read the value from the rotary encoder
+    lcd.setCursor(0, 1);
+    lcd.print(">");
+    lcd.print(ProgramNames[lcdKeyMenu]);
+    lcd.print(F("                  "));
+  }
+  TotalPeriodStart = millis();
+  timeStopped = 0;
+  pauseTime = 0;
+  pause = false;
   StartButtonFun();
   Serial.print(F("Programme '"));
   Serial.print(ProgramNames[lcdKeyMenu]);
