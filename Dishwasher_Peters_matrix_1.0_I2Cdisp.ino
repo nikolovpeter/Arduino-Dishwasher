@@ -1,9 +1,9 @@
 
 //Peter Nikolov's Dishwasher v.1.0.
 //Programer: Peter Nikolov.
-//Based on Rivera_1.0 by Pedro Rivera.
+//Based on Rivera_1.0 by Pedro Rivera and the work of steve8428 - Thank you.
 //A dishwasher controller with different wash programs defined via a matrix of constants,
-//temperature control thermistor 10k.
+//using temperature control thermistor 10k and a potentiometer 50k for program selector.
 //6 relay control, opto-isolator adviceable.
 //Licensed under Creative Commons.
 
