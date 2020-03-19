@@ -21,15 +21,16 @@
 #define DrainPump 7 //drain pump
 #define DetergentSolenoid 8 //detergent dispenser solenoid 
 #define RinseAidSolenoid 9 //rinse aid dispenser solenoid
-#define Buzzer 10 //Buzzer/beeper 
-#define RegenerationSolenoid A5 //regeneration solenoid 
-#define DoorSwitch 12 //door button
-//#define ErrorSensor 11 //overfill sensor error
-#define StartButton A0 //start/PausedState/resume/reset button
-#define RotaryEncoderPinA A1 // Rotary Encoder DT
+#define RegenerationSolenoid 10 //regeneration solenoid 
+#define WaterLevelSensor 11 //fill sensor level 1
+// #define WaterLevelSensor2 12 //fill sensor level 2
+// #define ErrorSensor 13 //overfill sensor error
+#define DoorSwitch A5 //door switch
+#define ONE_WIRE_BUS A4 // OneWire interface (for thermometer)
+#define Buzzer A3 //Buzzer/beeper 
 #define RotaryEncoderPinB A2 // Rotary Encoder CLK
-#define WaterLevelSensor A3 //fill sensor
-#define ONE_WIRE_BUS 11 // OneWire interface (for thermometer)
+#define RotaryEncoderPinA A1 // Rotary Encoder DT
+#define StartButton A0 //start/PausedState/resume/reset button
 
 rgb_lcd lcd;
 
