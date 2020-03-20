@@ -21,12 +21,12 @@
 #define DrainPump 7 //drain pump
 #define DetergentSolenoid 8 //detergent dispenser solenoid 
 #define RinseAidSolenoid 9 //rinse aid dispenser solenoid
-#define RegenerationSolenoid 10 //regeneration solenoid 
+#define RegenerationSolenoid A7 //regeneration solenoid 
 #define WaterLevelSensor 11 //fill sensor level 1
 // #define WaterLevelSensor2 12 //fill sensor level 2
 // #define ErrorSensor 13 //overfill sensor error
-#define DoorSwitch 3 //door switch
-#define ONE_WIRE_BUS 2 // OneWire interface (for thermometer)
+#define DoorSwitch 12 //door switch
+#define ONE_WIRE_BUS 10 // OneWire interface (for thermometer)
 #define Buzzer A3 //Buzzer/beeper 
 #define RotaryEncoderPinB A2 // Rotary Encoder CLK
 #define RotaryEncoderPinA A1 // Rotary Encoder DT
@@ -50,7 +50,7 @@ const byte Rinse1Durations[] =  {0, 6, 6, 6, 6, 6, 6, 10, 14}; // Rinse 1 durati
 const byte Rinse2Durations[] =  {0, 6, 6, 2, 2, 2, 6, 0, 11}; // Rinse 2 durations per programs in minutes; 0 = no Rinse 2
 const byte ClearRinseDurations[] =  {0, 10, 10, 10, 10, 10, 10, 0, 20}; // Clear Rinse durations per programs in minutes; 0 = no Clear Rinse
 const byte DryDurations[] =  {0, 11, 11, 11, 2, 2, 1, 1, 12}; // Drying durations per programs in minutes; 0 = no Drying
-const int ButtonDebounceDelay = 15; // delay to count as button pressed - 15 milliseconds
+const int ButtonDebounceDelay = 10; // delay to count as button pressed - 15 milliseconds
 const int ResetButtonDebounceDelay = 5000; // delay to count as reset - 5 seconds
 const int OverheatLimit = 72; // Temperature limit to count for overheating
 
@@ -222,23 +222,23 @@ void FinishProgrammeFunction() { // Washing programme finished
   Serial.print(TotalPeriodDuration / 60000);
   Serial.println(F(" minutes.")); //temp
   while (true) {
-    StartButtonFunction();
+    // StartButtonFunction();
   };
   Serial.println(F("Finish ended.")); //temp
 }
 
 
 void DoorSwitchFunction() { // Door swich action
-  Serial.println(F("actDoorSwitch started.")); //temp
+  Serial.println(F("DoorSwitchFunction started.")); //temp
   PausedStateFunction();
-  Serial.println(F("Machine PausedStated due to open door.")); //temp
+  Serial.println(F("Machine paused due to open door.")); //temp
   DoorSwitchState = digitalRead(DoorSwitch);
   while (DoorSwitchState == HIGH && PausedState == true) {
     DoorSwitchState = digitalRead(DoorSwitch);
   }
   Serial.println(F("Machine resumed after door closed.")); //temp
   ResumeFunction();   //resume program
-  Serial.println(F("actDoorSwitch ended.")); //temp
+  Serial.println(F("DoorSwitchFunction ended.")); //temp
 }
 
 void StopAllFunction() {  // Stop all parts of the machine
@@ -279,7 +279,7 @@ void ResumeFunction() { // Resume wash processes after PausedState
   Serial.println(F("resumeFun started.")); //temp
   lcd.setCursor(0, 1);
   lcd.print(F("Resuming...     "));
-  Serial.println(F("Resumed from PausedState.")); //temp
+  Serial.println(F("Resumed from paused state.")); //temp
   tone (Buzzer, 800, 150); // Buzz for 150 milliseconds with frequency 700 Hz
   delay (400);
   tone (Buzzer, 800, 300); // Buzz for 300 milliseconds with frequency 700 Hz
@@ -353,10 +353,10 @@ void ErrorFunction() { // Error encountered - stop all wash processes and show f
       faultDescription = faultDescription +  F(" degrees Celsius. All wash processes stopped.");
       break;
     case 21:
-      faultDescription = F("21: Water temperature not reached after 25 minutes of heating - possible Heater malfunction. Water drained. All wash processes stopped.");
+      faultDescription = F("21: Water temperature not reached after 25 minutes of heating - possible heater or sensor malfunction. Water drained. All wash processes stopped.");
       break;
     case 30:
-      faultDescription = F("30: Heater ON while wash pump OFF - possible wash pump malfunction or Heater does not turn off. All wash processes stopped. There may be water in the machine.");
+      faultDescription = F("30: Heater ON while wash pump OFF - possible wash pump malfunction or heater does not turn off. All wash processes stopped. There may be water in the machine.");
       break;
     case 40:
       faultDescription = F("40: Water level high after 3 minutes of draining - possible drain pump malfunction or water outlet blocked. All wash processes stopped. There may be water in the machine.");
@@ -956,6 +956,7 @@ void setup() {
   digitalWrite(Buzzer, LOW);
   // attachInterrupt(digitalPinToInterrupt(DoorSwitch), actDoorSwitch, FALLING); // Not used at this time - door switch is currently checked via polling together with the On/Off button
   // attachInterrupt(digitalPinToInterrupt(3), ErrorSensororFunction, FALLING); // For future use
+  WaterTemperatureFunction();
   Serial.println("setup ended."); //temp
 }
 
