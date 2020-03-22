@@ -40,7 +40,7 @@ DallasTemperature sensors(&oneWire);
 //constants declaration
 const String SoftwareVersion = "1.1";
 const int NumberOfPrograms = 9;
-const String ProgramNames[] = {"Restart", "Intensive Wash", "Normal Wash", "Eco Wash", "Fast Wash", "Express Strong", "Cold Wash", "Rinse Only", "Custom"}; // Names of programs
+const String ProgramNames[] = {"Drain & Restart", "Intensive Wash", "Normal Wash", "Eco Wash", "Fast Wash", "Express Strong", "Cold Wash", "Rinse Only", "Custom"}; // Names of programs
 const byte HighestTemperatures[] = {0, 65, 60, 48, 36, 60, 5, 20, 65}; // Highest allowed temperatures for programs in degrees Celsius
 const byte ExpectedDurations[] =  {0, 120, 100, 80, 40, 50, 55, 20, 120}; // Expected durations of programs in minutes
 const byte MatrixStructure[] =  {0, 1, 1, 0, 1, 1, 1, 1, 0}; // 1 = matrix structure; 0 = custom program
@@ -136,19 +136,20 @@ void DisplayTemperatureFunction() { // Display current temperature on screen
 }
 
 
-unsigned int EncoderFunction(int StartPosition, int EndPosition) { // Read rotary encoder
+unsigned int EncoderFunction(int LowestPosition, int HighestPosition, int EncoderStep) { // Read rotary encoder
   int RotaryEncoderPinAState = digitalRead(RotaryEncoderPinA);
   if ((RotaryEncoderPinALast == LOW) && (RotaryEncoderPinAState == HIGH)) {
     if (digitalRead(RotaryEncoderPinB) == LOW) {
-      RotaryEncoderPosition--;
+      RotaryEncoderPosition -= EncoderStep;
     } else {
-      RotaryEncoderPosition++;
+      RotaryEncoderPosition += EncoderStep;
     }
     tone (Buzzer, 600, 7); // Buzz for 7 milliseconds with frequency 600 Hz
   }
   RotaryEncoderPinALast = RotaryEncoderPinAState;
-  if (RotaryEncoderPosition < StartPosition) RotaryEncoderPosition = StartPosition;
-  if (RotaryEncoderPosition > EndPosition) RotaryEncoderPosition = EndPosition;
+  RotaryEncoderPosition = constrain (RotaryEncoderPosition, LowestPosition, HighestPosition);
+  // if (RotaryEncoderPosition < StartPosition) RotaryEncoderPosition = StartPosition;
+  // if (RotaryEncoderPosition > EndPosition) RotaryEncoderPosition = EndPosition;
   return RotaryEncoderPosition;
 }
 
@@ -493,7 +494,7 @@ void FillAction() { // Fill water
     Serial.print(F("    Total fill time = "));  // temp - to be removed
     Serial.println(TotalFillDuration);  // temp - to be removed
     CurrentFillStart = 0;
-//    RawADC = 340; //temporary temperature - around 9.7 degrees C - to be removed
+    //    RawADC = 340; //temporary temperature - around 9.7 degrees C - to be removed
     digitalWrite(WashPump, WashPumpStatus);  // Restore wash pump state
     if (HeaterStatus == HIGH) {
       HeaterONAction(); // Restore Heater state
@@ -858,11 +859,9 @@ void CustomProgramme() {  // Custom programme - allows user selection of custom 
   lcd.setCursor(0, 1);
   lcd.print(F("Temperature:      "));
   StartButtonCode = 0; // initialize selector to select maximum temperature
+  RotaryEncoderPosition = 5;
   while (ButtonsFunction() != 1) {
-    SelectorDialValue = EncoderFunction(1,13); // read custom temperature
-    CustomTemperature = SelectorDialValue * 5;
-    if (CustomTemperature < 5) CustomTemperature = 5;
-    if (CustomTemperature > TemperatureLimit) CustomTemperature = TemperatureLimit;
+    CustomTemperature = EncoderFunction(5, TemperatureLimit, 5); // read custom temperature
     lcd.setCursor(12, 1);
     lcd.print(CustomTemperature);
     lcd.print((char)223);
@@ -873,11 +872,9 @@ void CustomProgramme() {  // Custom programme - allows user selection of custom 
   lcd.setCursor(10, 0);
   lcd.print("______  ");
   StartButtonCode = 0; // initialize selector to select maximum duration
+  RotaryEncoderPosition = 10;
   while (ButtonsFunction() != 1) {
-    SelectorDialValue = EncoderFunction(1, 24);  // read custom duration
-    CustomDuration = SelectorDialValue * 5;
-    if (CustomDuration < 10) CustomDuration = 10;
-    if (CustomDuration > ExpectedDuration) CustomDuration = ExpectedDuration;
+    CustomDuration = EncoderFunction(10, ExpectedDuration, 5);  // read custom duration
     lcd.setCursor(12, 1);
     lcd.print(CustomDuration);
     lcd.print("'   ");
@@ -931,6 +928,7 @@ void setup() {
   lcd.clear();
   lcd.home (); // go home
   Serial.begin(9600); // opens serial port, sets data rate to 9600 bps
+  delay(3000);
   Serial.println(F("setup started.")); //temp
   pinMode(Heater, OUTPUT);
   pinMode(WashPump, OUTPUT);
@@ -977,8 +975,9 @@ void loop() {
   lcd.print(F("Select a program"));
   lcd.setCursor(0, 1);
   lcd.print(F("and press Start"));
+  RotaryEncoderPosition = 0;
   while (ButtonsFunction() != 1) {
-    MenuSelectorValue = EncoderFunction(0, NumberOfPrograms - 1); //read the value from the rotary encoder
+    MenuSelectorValue = EncoderFunction(0, NumberOfPrograms - 1, 1); //read the value from the rotary encoder
     lcd.setCursor(0, 1);
     lcd.print(">");
     lcd.print(ProgramNames[MenuSelectorValue]);
